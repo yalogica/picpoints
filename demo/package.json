@@ -1,0 +1,16 @@
+{
+    "name": "picpoints-demo-app",
+    "private": true,
+    "version": "0.1.0",
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build"
+    },
+    "devDependencies": {
+        "typescript": "^5.8.3",
+        "vite": "^6.3.2"
+    },
+    "dependencies": {
+        "picpoints": "link:.."
+    }
+}

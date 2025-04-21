@@ -19,12 +19,12 @@
     "build:watch": "vite build --watch --mode development"
   },
   "devDependencies": {
-    "sass": "^1.83.0",
-    "typescript": "^5.7.2",
-    "vite": "^6.0.4",
-    "vite-plugin-dts": "^4.4.0"
+    "sass": "^1.86.3",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.2",
+    "vite-plugin-dts": "^4.5.3"
   },
   "dependencies": {
-    "nanoid": "^5.0.9"
+    "nanoid": "^5.1.5"
   }
 }

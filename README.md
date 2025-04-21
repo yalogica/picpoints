@@ -1,2 +1,2 @@
-# picpoints
-A lightweight JavaScript library for creating mobile-friendly, interactive image maps
+# PicPoints
+A lightweight JavaScript library for creating mobile-friendly, interactive image maps.
