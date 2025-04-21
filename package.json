@@ -1,0 +1,30 @@
+{
+  "name": "picpoints",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.es.js",
+      "require": "./dist/index.umd.js"
+    },
+    "./dist/index.css": {
+      "import": "./dist/index.css",
+      "require": "./dist/index.css"
+    }
+  },
+  "scripts": {
+    "build": "vite build",
+    "build:watch": "vite build --watch --mode development"
+  },
+  "devDependencies": {
+    "sass": "^1.83.0",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.4",
+    "vite-plugin-dts": "^4.4.0"
+  },
+  "dependencies": {
+    "nanoid": "^5.0.9"
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "types": [],
+    
+    /* Bundler mode */
+     "moduleResolution": "node",
+     "resolveJsonModule": true,
+     "esModuleInterop": true,
+     "isolatedModules": true,
+    
+    /* Linting */
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    // probably we would never enable this one
+    // because it's too strict, HappyMap generates many functions on the runtime
+    "strictPropertyInitialization": false
+  },
+  "include": ["src"],
+  "exclude": ["node_modules", "dist"]
+}
