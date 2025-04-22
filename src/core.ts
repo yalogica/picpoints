@@ -3,8 +3,8 @@ import { Node } from '@/node';
 import { InteractiveMap } from '@/interactivemap';
 
 
-export const coreNodeAdd = Symbol("nodeAdd");
-export const coreNodeRemove = Symbol("nodeRemove");
+export const coreNodeAdd = Symbol('nodeAdd');
+export const coreNodeRemove = Symbol('nodeRemove');
 
 export class Core {
     private static _instance: Core;
@@ -23,7 +23,7 @@ export class Core {
     /**
     * Show different warnings about errors or wrong API usage
     * @example
-    * HappyMap.showWarnings = false;
+    * PicPoints.showWarnings = false;
     */
     showWarnings: boolean = true;
 

@@ -11,8 +11,43 @@
     height: 100%;
 
     .picpnts-mapboard {
-		position: absolute;
-		width: 100%;
-		height: 100%;
+        position: absolute;
+        width: 100%;
+        height: 100%;
+
+        .picpnts-viewbox {
+			position: absolute;
+			width: 100%;
+			height: 100%;
+			overflow: hidden;
+		}
+	
+		.picpnts-transform {
+			position: absolute;
+		}
+	
+		.picpnts-layers {
+			position: relative;
+			width: 0;
+			height: 0;
+		}
+
+        .picpnts-background {
+			transform: translate(-50%, -50%);
+	
+			img {
+				width: 100%;
+				height: 100%;
+				pointer-events: none;
+				user-select: none;
+			}
+		}
+
+        .picpnts-shapes {
+			position: absolute;
+			top: 0;
+			left: 0;
+			transform: translate(-50%, -50%);
+        }
     }
  }

@@ -1,4 +1,4 @@
-import { HappyMap } from '@/happymap';
+import { PicPoints } from '@/picpoints';
 import { coreNodeAdd, coreNodeRemove } from './core';
 import { Util } from '@/util';
 import { NodeType } from '@/types';
@@ -43,11 +43,11 @@ export abstract class Node<Config extends NodeConfig = NodeConfig> {
     
     private [nodeOnAdd](parent: Node): void {
         this._parent = parent;
-        HappyMap[coreNodeAdd](this);
+        PicPoints[coreNodeAdd](this);
         this._onAdd(parent);
     };
     private [nodeOnRemove](parent: Node): void {
-        HappyMap[coreNodeRemove](this);
+        PicPoints[coreNodeRemove](this);
         this._onRemove(parent);
         this._parent = null;
     };
