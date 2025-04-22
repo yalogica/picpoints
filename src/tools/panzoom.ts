@@ -1,4 +1,4 @@
-import { Point, EditorMode } from '@/types';
+import { Point, ViewMode } from '@/types';
 import { InteractiveMap } from '@/interactivemap';
 
 
@@ -56,7 +56,7 @@ export class PanZoom {
         window.addEventListener('pointercancel', this._onPanEnd, { once: true });
     };
     private _onPanMove = (e: PointerEvent): void => {        
-        if (!this.interactiveMap.activeMapBoard || this.interactiveMap.mode !== EditorMode.PanZoom || !this.interactiveMap.interactivePan) {
+        if (!this.interactiveMap.activeMapBoard || this.interactiveMap.mode !== ViewMode.PanZoom || !this.interactiveMap.interactivePan) {
             this._onPanEnd(e);
             return;
         }
@@ -99,7 +99,7 @@ export class PanZoom {
         this._panning.active = false;
     };
     private _onMouseWheelZoom = (e: WheelEvent): void => {
-        if (!this.interactiveMap.activeMapBoard || this.interactiveMap.mode !== EditorMode.PanZoom || !this.interactiveMap.interactiveZoom) {
+        if (!this.interactiveMap.activeMapBoard || this.interactiveMap.mode !== ViewMode.PanZoom || !this.interactiveMap.interactiveZoom) {
             return;
         }
 

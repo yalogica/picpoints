@@ -11,7 +11,7 @@ export enum NodeType {
     Text = 'text'
 };
 
-export enum EditorMode {
+export enum ViewMode {
     None = 'none',
     Select = 'select',
     PanZoom = 'panzoom'
@@ -31,7 +31,7 @@ export type Size = {
 
 export const DEFAULT = {
     INTERACTIVEMAP: {
-        MODE: EditorMode.None,
+        MODE: ViewMode.PanZoom,
         INTERACTIVE_PAN: true,
         INTERACTIVE_ZOOM: true,
         USE_PANZOOM_ON_SPACE_HOLD: true,

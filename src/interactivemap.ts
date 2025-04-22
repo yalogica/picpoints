@@ -2,11 +2,12 @@ import { PicPoints } from '@/picpoints';
 import { Util } from '@/util';
 import { Factory } from '@/factory';
 import { BBox } from '@/bbox';
-import { NodeType, Point, EditorMode, DEFAULT } from '@/types';
+import { NodeType, Point, ViewMode, DEFAULT } from '@/types';
 import { Node, NodeConfig, nodeOnAdd, nodeOnRemove } from '@/node';
 import { IContainer } from '@/container';
 import { MapBoard, mapBoardAttachTo, mapBoardDetachFrom, mapBoardShow, mapBoardHide } from '@/mapboard';
 import { Shape } from '@/shapes/shape';
+import { PanZoom } from '@/tools/panzoom';
 
 
 interface DOM {
@@ -16,7 +17,7 @@ interface DOM {
 
 export interface InteractiveMapConfig extends NodeConfig {
     container?: HTMLDivElement | string;
-    mode?: EditorMode;
+    mode?: ViewMode;
     interactivePan?: boolean;
     interactiveZoom?: boolean;
     usePanZoomOnSpaceHold?: boolean;
@@ -31,8 +32,8 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
         interactiveMap: document.createElement('div')
     };
 
-    private _prevMode: EditorMode | null; 
-    //private _panzoom: PanZoom;
+    private _prevMode: ViewMode | null; 
+    private _panzoom: PanZoom;
     //!!!private _transformer: Transformer;
     //!!!private _selector: Selector;
     private _mapBoards: MapBoard[] = [];
@@ -41,7 +42,7 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
     private _resizeObserver: ResizeObserver | null;
 
     container: HTMLDivElement;
-    mode: EditorMode;
+    mode: ViewMode;
     interactivePan: boolean;
     interactiveZoom: boolean;
     usePanZoomOnSpaceHold: boolean;
@@ -58,7 +59,7 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
         Factory.addGetterSetterAndInitialize(this, "usePanZoomOnSpaceHold", DEFAULT.INTERACTIVEMAP.USE_PANZOOM_ON_SPACE_HOLD);
         Factory.addGetterSetterAndInitialize(this, "selectAndTransform", DEFAULT.INTERACTIVEMAP.SELECT_AND_TRANSFORM);
 
-        //!!!this._panzoom = new PanZoom(this);
+        this._panzoom = new PanZoom(this);
         //!!!this._transformer = new Transformer(this);
         //!!!this._selector = new Selector(this);
 
@@ -100,7 +101,7 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
         this._resizeObserver?.disconnect();
     };
     private _onKeyDown = (e: KeyboardEvent): void => {
-        if (this.usePanZoomOnSpaceHold && this.mode !== EditorMode.PanZoom && e.code === 'Space' && !this._prevMode) {
+        if (this.usePanZoomOnSpaceHold && this.mode !== ViewMode.PanZoom && e.code === 'Space' && !this._prevMode) {
             e.preventDefault();
 
             switch (this.mode) {
@@ -108,7 +109,7 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
             }
 
             this._prevMode = this.mode;
-            this.mode = EditorMode.PanZoom;
+            this.mode = ViewMode.PanZoom;
         }
     };
     private _onKeyUp = (e: KeyboardEvent): void => {
@@ -119,6 +120,54 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
     };
     private _onResize = (): void => {
         this._activeMapBoard?.resize();
+    };
+
+    /**
+    * set css classes for the InteractiveMap element
+    */
+    private setClassName(className: string): this {
+        const prev = this.getAttr('className');
+       
+        prev && this._dom?.interactiveMap.classList.remove(...prev.split(' '));
+        className && this._dom?.interactiveMap.classList.add(...className.split(' '));
+
+        this.setAttr('className', className);
+
+        return this;
+    };
+    /**
+    * set container dom element which contains the stage wrapper div element
+    */
+    private setContainer(container: HTMLDivElement | string): this {
+        if (typeof container === 'string') {
+            if (container.charAt(0) === '.') {
+                const className = container.slice(1);
+                container = document.getElementsByClassName(className)[0] as HTMLDivElement;
+            } else {
+                let id;    
+                if (container.charAt(0) !== '#') {
+                    id = container;
+                } else {
+                    id = container.slice(1);
+                }
+                container = document.getElementById(id) as HTMLDivElement;
+            }
+
+            if (!container) {
+                Util.throw('Can not find container in document.');
+            }
+        }
+
+        this.setAttr('container', container);
+    
+        if (this._dom && this._dom.container && this._dom.interactiveMap) {
+            if (this._dom.interactiveMap.parentElement) {
+                this._dom.interactiveMap.parentElement.removeChild(this._dom.interactiveMap);
+            }
+            this._dom.container.appendChild(this._dom.interactiveMap);
+        }
+
+        return this;
     };
 
 
@@ -212,8 +261,8 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
     };
     destroy(): void {
         this._unbind();
-        //!!!this._panzoom.destroy();
-        //this._selector.destroy();
+        this._panzoom.destroy();
+        //!!!this._selector.destroy();
         //this._transformer.destroy();
     };
 

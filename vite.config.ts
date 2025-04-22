@@ -32,6 +32,11 @@ export default defineConfig(({ mode }) => {
   const isDev = mode === 'development';
 
   return {
+    resolve: {
+      alias: {
+        '@': resolve(__dirname, './src'), // теперь @ ведёт к папке src/
+      }
+    },
     build: {
       sourcemap: true,
       minify: !isDev,

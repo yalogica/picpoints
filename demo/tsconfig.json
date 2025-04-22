@@ -4,7 +4,8 @@
       
         "baseUrl": ".",
         "paths": {
-            "picpoints": ["link:../dist/types/index.d.ts"]
+            "picpoints": ["../dist/types/index.d.ts"],
+            "picpoints/*": ["../dist/types/*"]
         }
     }
 }
