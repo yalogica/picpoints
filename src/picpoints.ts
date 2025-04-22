@@ -5,9 +5,7 @@ import { Node } from '@/node';
 import { InteractiveMap } from '@/interactivemap';
 import { MapBoard } from '@/mapboard';
 import { Shape } from '@/shapes/shape';
-//import { Icon } from '@/shapes/icon';
-//import { Image } from '@/shapes/image';
-//import { Text } from '@/shapes/text';
+import { Icon } from '@/shapes/icon';
 import { Location } from '@/shapes/location';
 
 
@@ -18,9 +16,7 @@ export const PicPoints = Util.assign(
         InteractiveMap ,
         MapBoard,
         Shape,
-        //Icon,
-        //Image,
-        //Text,
+        Icon,
         Location
     }
 );

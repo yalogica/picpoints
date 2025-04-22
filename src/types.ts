@@ -50,6 +50,7 @@ export const DEFAULT = {
         Y: 0,
         WIDTH: 0,
         HEIGHT: 0,
+        SIZE: 0,
         ROTATION: 0
     }
 };

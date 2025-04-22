@@ -12,7 +12,7 @@ interface Panning {
 };
 
 export class PanZoom {
-    private _interactivemap: InteractiveMap;
+    private _interactiveMap: InteractiveMap;
     private _panning: Panning = {
         active: false,
         pos: {
@@ -22,25 +22,25 @@ export class PanZoom {
         }
     };
 
-    constructor(interactivemap: InteractiveMap) {
-        this._interactivemap = interactivemap;
+    constructor(interactiveMap: InteractiveMap) {
+        this._interactiveMap = interactiveMap;
 
         this._bind();
     }
     private _bind() {
-        this.interactivemap.getStageContainer().addEventListener('pointerdown', this._onPanStart);
-        this.interactivemap.getStageContainer().addEventListener('wheel', this._onMouseWheelZoom);
+        this.interactiveMap.getInnerContainer().addEventListener('pointerdown', this._onPanStart);
+        this.interactiveMap.getInnerContainer().addEventListener('wheel', this._onMouseWheelZoom);
     };
     private _unbind() {
-        this.interactivemap.getStageContainer().removeEventListener('pointerdown', this._onPanStart);
-        this.interactivemap.getStageContainer().removeEventListener('wheel', this._onMouseWheelZoom);
+        this.interactiveMap.getInnerContainer().removeEventListener('pointerdown', this._onPanStart);
+        this.interactiveMap.getInnerContainer().removeEventListener('wheel', this._onMouseWheelZoom);
 
         window.removeEventListener('pointermove', this._onPanMove);
         window.removeEventListener('pointerup', this._onPanEnd);
         window.removeEventListener('pointercancel', this._onPanEnd);
     };
     private _onPanStart = (e: PointerEvent): void => {
-        if (!this.stage.activeArtboard || !this.stage.interactivePan) {
+        if (!this.interactiveMap.activeMapBoard || !this.interactiveMap.interactivePan) {
             return;
         }
 
@@ -51,17 +51,17 @@ export class PanZoom {
         this._panning.pos.start.x = this._panning.pos.prev.x = this._panning.pos.curr.x = e.pageX;
         this._panning.pos.start.y = this._panning.pos.prev.y = this._panning.pos.curr.y = e.pageY;
 
-        window.addEventListener("pointermove", this._onPanMove);
-        window.addEventListener("pointerup", this._onPanEnd, { once: true });
-        window.addEventListener("pointercancel", this._onPanEnd, { once: true });
+        window.addEventListener('pointermove', this._onPanMove);
+        window.addEventListener('pointerup', this._onPanEnd, { once: true });
+        window.addEventListener('pointercancel', this._onPanEnd, { once: true });
     };
     private _onPanMove = (e: PointerEvent): void => {        
-        if (!this.stage.activeArtboard || this.stage.mode !== EditorMode.PanZoom || !this.stage.interactivePan) {
+        if (!this.interactiveMap.activeMapBoard || this.interactiveMap.mode !== EditorMode.PanZoom || !this.interactiveMap.interactivePan) {
             this._onPanEnd(e);
             return;
         }
 
-        if (!(e.pressure > 0 || e.pointerType === "mouse")) {
+        if (!(e.pressure > 0 || e.pointerType === 'mouse')) {
             this._onPanEnd(e);
             return;
         }
@@ -87,26 +87,26 @@ export class PanZoom {
             this._panning.pos.prev.y = this._panning.pos.curr.y;
 
             requestAnimationFrame(() => {
-                this.interactivemap.activeArtboard?.translateBy(dx, dy);
+                this.interactiveMap.activeMapBoard?.translateBy(dx, dy);
             });
         }
     };
     private _onPanEnd = (e: PointerEvent): void => {
-        window.removeEventListener("pointermove", this._onPanMove);
-        window.removeEventListener("pointerup", this._onPanEnd);
-        window.removeEventListener("pointercancel", this._onPanEnd);
+        window.removeEventListener('pointermove', this._onPanMove);
+        window.removeEventListener('pointerup', this._onPanEnd);
+        window.removeEventListener('pointercancel', this._onPanEnd);
 
         this._panning.active = false;
     };
     private _onMouseWheelZoom = (e: WheelEvent): void => {
-        if (!this.interactivemap.activeMapBoard || this.interactivemap.mode !== EditorMode.PanZoom || !this.interactivemap.interactiveZoom) {
+        if (!this.interactiveMap.activeMapBoard || this.interactiveMap.mode !== EditorMode.PanZoom || !this.interactiveMap.interactiveZoom) {
             return;
         }
 
         e.preventDefault();
         e.stopPropagation();
 
-        const container = this.interactivemap.getStageContainer();
+        const container = this.interactiveMap.getInnerContainer();
         const rect = container.getBoundingClientRect();
         const focalPoint = {
             x: e.clientX - rect.left - rect.width / 2,
@@ -115,12 +115,12 @@ export class PanZoom {
         const scale = 1 - Math.sign(e.deltaY) * 0.1; // 10%
 
         requestAnimationFrame(() => {
-            this.interactivemap.activeArtboard?.zoomBy(scale, focalPoint);
+            this.interactiveMap.activeMapBoard?.zoomBy(scale, focalPoint);
         });
     };
 
-    get interactivemap(): InteractiveMap {
-        return this._interactivemap;
+    get interactiveMap(): InteractiveMap {
+        return this._interactiveMap;
     };
 
     destroy() {

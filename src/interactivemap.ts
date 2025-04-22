@@ -121,22 +121,100 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
         this._activeMapBoard?.resize();
     };
 
+
+    get activeMapBoard(): MapBoard | null {
+        return this._activeMapBoard;
+    };
+    get center(): Point {
+        return {
+            x: this._dom.interactiveMap.clientWidth / 2,
+            y: this._dom.interactiveMap.clientHeight / 2
+        }
+    };
+    //!!!get transformer(): Transformer {
+        //return this._transformer;
+    //};
+
     /**
-    * Retrieves the DOM element that serves as the container for the stage.
-    * This element is typically used to render or manipulate the visual components of the stage.
+    * Retrieves the DOM element that serves as the inner container for the InteractiveMap.
+    * This element is typically used to render or manipulate the visual components of the InteractiveMap.
     */
     getInnerContainer(): HTMLDivElement {
         return this._dom.interactiveMap;
     };
+     /**
+    * Displays the specified artboard on the stage
+    */
+     show(mapBoard: MapBoard | string, force?: boolean): void {
+        const foundNode = this.getChild(mapBoard);
+        if (!foundNode) {
+            Util.warn(`MapBoard '${Util.nodeId(mapBoard)}' not found in InteractiveMap '${Util.nodeId(this)}'. The 'show' operation was ignored.`);
+            return;
+        }
+
+        this.hide(force);
+
+        this._pendingMapBoards = this._pendingMapBoards.filter(b => b !== foundNode);
+        this._pendingMapBoards.unshift(foundNode);
+
+        foundNode[mapBoardDetachFrom](this);
+        foundNode[mapBoardAttachTo](this);
+        foundNode[mapBoardShow](this, force).then((mapBoard: MapBoard | null) => {
+            if (!mapBoard) {
+                return;
+            }
+
+            if (this._pendingMapBoards.length && this._pendingMapBoards[0] == mapBoard) {
+                // show the top pending mapBoard only
+                this._activeMapBoard = mapBoard;
+                PicPoints.fire('mapboard:show', this, { mapBoard: mapBoard });
+            } else {
+                // all other pending mapBoards should be hidden
+                mapBoard[mapBoardHide](this).then((mapBoard: MapBoard | null) => {
+                    if (mapBoard) {
+                        mapBoard[mapBoardDetachFrom](this);
+                    }
+                }).catch(() => {
+                });
+            }
+
+            this._pendingMapBoards = this._pendingMapBoards.filter(b => b !== mapBoard);
+        });
+    };
+    /**
+     * Hide the current mapBoard
+     */
+    async hide(force?: boolean): Promise<null> {
+        return new Promise((resolve) => {
+            if (this._activeMapBoard) {
+                this._activeMapBoard[mapBoardHide](this, force).then((mapBoard: MapBoard | null) => {
+                    if (!mapBoard) {
+                        return;
+                    }
+                    
+                    mapBoard[mapBoardDetachFrom](this);
+                    PicPoints.fire('mapboard:hide', this, { mapBoard: mapBoard } );
+
+                }).catch((mapBoard: MapBoard) => {
+                    this._activeMapBoard = mapBoard;
+                }).finally(() => {    
+                    resolve(null);
+                });
+
+                this._activeMapBoard = null;
+            } else {
+                resolve(null);
+            };
+        });
+    };
     update(): void {
         this._activeMapBoard?.update();
     };
-
     destroy(): void {
         this._unbind();
         //!!!this._panzoom.destroy();
-        //!!!this._selector.destroy();
-        //!!!this._transformer.destroy();
+        //this._selector.destroy();
+        //this._transformer.destroy();
     };
 
     //==============================================================

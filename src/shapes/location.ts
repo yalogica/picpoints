@@ -10,30 +10,19 @@ interface DOM {
     container: HTMLDivElement, 
 };
 
-export interface IconConfig extends ShapeConfig {
-    x?: number;
-    y?: number;
-    size?: number;
+export interface LocationConfig extends ShapeConfig {
 };
 
-export class Icon<Config extends IconConfig = IconConfig> extends Shape<Config> {
-    protected _nodeType: NodeType = NodeType.Icon;
+export class Location<Config extends LocationConfig = LocationConfig> extends Shape<Config> {
+    protected _nodeType: NodeType = NodeType.Location;
 
     private _dom: DOM = {
         container: document.createElement('div'),
     };
 
-    x: number;
-    y: number;
-    size: number;
-
     constructor(config?: Config) {
         super(config);
 
-        Factory.addGetterSetterAndInitialize(this, 'x', DEFAULT.SHAPE.X);
-        Factory.addGetterSetterAndInitialize(this, 'y', DEFAULT.SHAPE.Y);
-        Factory.addGetterSetterAndInitialize(this, 'size', DEFAULT.SHAPE.SIZE);
-      
         this._buildDOM();
 
         PicPoints.fire('shape:ready', this, { shape: this });
@@ -56,7 +45,7 @@ export class Icon<Config extends IconConfig = IconConfig> extends Shape<Config> 
     };
 
     getBBox(): BBox {
-        const bbox = new BBox(this.x, this.y, this.size, this.size);
+        const bbox = new BBox(0, 0, 0, 0);
         return bbox;
     };
 };
