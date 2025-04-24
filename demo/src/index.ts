@@ -14,8 +14,8 @@ const mapBoard1 = new PicPoints.MapBoard({
     image: 'assets/placeholder-600x400.png',
     width: 300,
     height: 300,
-    useImageSize: false,
-    maintainAspectRatio: true,
+    useImageSize: true,
+    maintainAspectRatio: false,
     svgOverlayOptions: {
         anchor: 'top-left'
     },

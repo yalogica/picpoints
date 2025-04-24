@@ -1,41 +1,41 @@
 {
-  "name": "picpoints",
-  "private": true,
-  "version": "0.1.0",
-  "type": "module",
-  "types": "dist/types/index.d.ts",
-  "exports": {
-    ".": {
-      "import": "./dist/index.es.js",
-      "require": "./dist/index.umd.js"
+    "name": "picpoints",
+    "private": true,
+    "version": "0.1.0",
+    "type": "module",
+    "types": "dist/types/index.d.ts",
+    "exports": {
+        ".": {
+            "import": "./dist/index.es.js",
+            "require": "./dist/index.umd.js"
+        },
+        "./dist/styles.css": {
+            "import": "./dist/styles.css",
+            "require": "./dist/styles.css"
+        },
+        "./dist/animate.css": {
+            "import": "./dist/animate.css",
+            "require": "./dist/animate.css"
+        }
     },
-    "./dist/styles.css": {
-      "import": "./dist/styles.css",
-      "require": "./dist/styles.css"
+    "scripts": {
+        "build": "vite build",
+        "build:watch": "vite build --watch --mode development"
     },
-    "./dist/animate.css": {
-      "import": "./dist/animate.css",
-      "require": "./dist/animate.css"
+    "devDependencies": {
+        "@types/node": "^22.14.1",
+        "cssnano": "^7.0.6",
+        "postcss": "^8.5.3",
+        "rollup-plugin-postcss": "^4.0.2",
+        "rollup-plugin-scss": "^4.0.1",
+        "sass": "^1.86.3",
+        "terser": "^5.39.0",
+        "typescript": "^5.8.3",
+        "vite": "^6.3.2",
+        "vite-plugin-dts": "^4.5.3",
+        "vite-plugin-sass": "^0.1.0"
+    },
+    "dependencies": {
+        "nanoid": "^5.1.5"
     }
-  },
-  "scripts": {
-    "build": "vite build",
-    "build:watch": "vite build --watch --mode development"
-  },
-  "devDependencies": {
-    "@types/node": "^22.14.1",
-    "cssnano": "^7.0.6",
-    "postcss": "^8.5.3",
-    "rollup-plugin-postcss": "^4.0.2",
-    "rollup-plugin-scss": "^4.0.1",
-    "sass": "^1.86.3",
-    "terser": "^5.39.0",
-    "typescript": "^5.8.3",
-    "vite": "^6.3.2",
-    "vite-plugin-dts": "^4.5.3",
-    "vite-plugin-sass": "^0.1.0"
-  },
-  "dependencies": {
-    "nanoid": "^5.1.5"
-  }
 }
