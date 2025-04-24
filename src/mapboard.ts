@@ -2,8 +2,7 @@ import { PicPoints } from '@/picpoints';
 import { Util } from '@/util';
 import { MATRIX } from '@/matrix';
 import { BBox } from '@/bbox';
-import { Factory } from '@/factory';
-import { NodeType, ZoomType, Point, DEFAULT } from '@/types';
+import { NodeType, ZoomType, AnchorType, Point, DEFAULT } from '@/types';
 import { Node, NodeConfig, nodeOnAdd, nodeOnRemove } from '@/node';
 import { IContainer } from '@/container';
 import { InteractiveMap } from '@/interactivemap';
@@ -40,6 +39,21 @@ export enum ContainerType {
     Shapes = 'shapes'
 };
 
+export type EffectOptions = {
+    show?: string;
+    hide?: string;
+    duration?: number;
+};
+
+export type SvgOverlayOptions = {
+    x?: number | string;
+    y?: number | string;
+    width?: number | string;
+    height?: number | string;
+    anchor?: AnchorType;
+    rotation?: number;
+};
+
 export interface MapBoardConfig extends NodeConfig {
     image?: HTMLImageElement | string,
     useImageSize?: boolean,
@@ -48,16 +62,15 @@ export interface MapBoardConfig extends NodeConfig {
     pos?: Point,
     zoom?: ZoomType,
     maintainAspectRatio?: boolean,
-    effectShow?: string,
-    effectHide?: string,
-    effectDuration?: number
+    svgOverlay?: string,
+    svgOverlayOptions?: SvgOverlayOptions;
+    effect?: EffectOptions;
 };
 
 export const mapBoardAttachTo = Symbol('attachTo');
 export const mapBoardDetachFrom = Symbol('detachFrom');
 export const mapBoardShow = Symbol('show');
 export const mapBoardHide = Symbol('hide');
-
 
 export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends Node<Config> implements IContainer<Shape> {
     protected _nodeType: NodeType = NodeType.MapBoard;
@@ -89,38 +102,34 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
     private _showPromiseReject: ((mapBoard: MapBoard) => void) | null;
     private _hidePromiseReject: ((mapBoard: MapBoard) => void) | null;
 
-    image: HTMLImageElement | string;
-    useImageSize: boolean;
-    width: number;
-    height: number; 
-    pos: Point;
-    zoom: ZoomType;
-    maintainAspectRatio: boolean;
-    effectShow: string;
-    effectHide: string;
-    effectDuration: number;
+    private _width: number;
+    private _height: number;
+    private _image?: HTMLImageElement;
+    private _useImageSize: boolean;
+    private _pos: Point = DEFAULT.MAPBOARD.POS;
+    private _zoom: ZoomType;
+    private _maintainAspectRatio: boolean;
+    private _effect: EffectOptions = DEFAULT.MAPBOARD.EFFECT;
 
     constructor(config?: Config) {
         super(config);
 
-        // the order is important if the property values are relative (e.g., width, height, and useImageSize).
-        Factory.addGetterSetterAndInitialize(this, 'className');
-        Factory.addGetterSetterAndInitialize(this, 'width');
-        Factory.addGetterSetterAndInitialize(this, 'height');
-        Factory.addGetterSetterAndInitialize(this, 'image');
-        Factory.addGetterSetterAndInitialize(this, 'useImageSize', DEFAULT.MAPBOARD.USE_IMAGE_SIZE);
-        Factory.addGetterSetterAndInitialize(this, 'pos', DEFAULT.MAPBOARD.POS);
-        Factory.addGetterSetterAndInitialize(this, 'zoom', DEFAULT.MAPBOARD.ZOOM);
-        Factory.addGetterSetterAndInitialize(this, 'maintainAspectRatio', DEFAULT.MAPBOARD.MAINTAIN_ASPECT_RATIO);        
-        Factory.addGetterSetterAndInitialize(this, 'effectShow');
-        Factory.addGetterSetterAndInitialize(this, 'effectHide');
-        Factory.addGetterSetterAndInitialize(this, 'effectDuration');
+        this.className = config?.className;
+        this.width = config?.width ?? DEFAULT.MAPBOARD.WIDTH;
+        this.height = config?.height ?? DEFAULT.MAPBOARD.HEIGHT;
+        this.maintainAspectRatio = config?.maintainAspectRatio ?? DEFAULT.MAPBOARD.MAINTAIN_ASPECT_RATIO;
+        this.image = config?.image;
+        this.useImageSize = config?.useImageSize ?? DEFAULT.MAPBOARD.USE_IMAGE_SIZE;
+        this.pos = config?.pos ?? DEFAULT.MAPBOARD.POS;
+        this.zoom = config?.zoom ?? DEFAULT.MAPBOARD.ZOOM;
+        this.effect = config?.effect ?? DEFAULT.MAPBOARD.EFFECT;
 
         this._buildDOM();
 
         PicPoints.fire('mapboard:ready', this, { mapBoard: this });
     };
-    
+
+    //#region Private
     private [mapBoardAttachTo](interactiveMap: InteractiveMap): void {
        this._attachTo(interactiveMap);
     };
@@ -133,7 +142,6 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
     private async [mapBoardHide](interactiveMap: InteractiveMap, force?: boolean): Promise<MapBoard | null> {
         return this._hide(interactiveMap, force);
     };
-    
     private _buildDOM() {
         this._dom.mapboard.classList.add('picpnts-mapboard');
         this._dom.mapboard.setAttribute('data-id', this.id);
@@ -158,7 +166,7 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
             return;
         }
 
-        this.effectShow && this._dom.layers.classList.remove(this.effectShow);
+        this.effect?.show && this._dom.layers.classList.remove(this.effect.show);
         this._showPromiseReject(this);
         this._showPromiseReject = null;
     };
@@ -167,7 +175,7 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
             return;
         }
 
-        this.effectHide && this._dom.layers.classList.remove(this.effectHide);
+        this.effect?.hide && this._dom.layers.classList.remove(this.effect.hide);
         this._hidePromiseReject(this);
         this._hidePromiseReject = null;
     };
@@ -185,6 +193,7 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
         
         this._active = true;
 
+        this._setDirty('maintainAspectRatio');
         this._updatePosZoom(true);
         this._update();
     };
@@ -225,12 +234,12 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
             const doResolve = () => {
                 if(this._showPromiseReject) {
                     this._showPromiseReject = null;
-                    this.effectShow && this._dom.layers.classList.remove(this.effectShow);
+                    this.effect?.show && this._dom.layers.classList.remove(this.effect.show);
                     resolve(this);
                 }
             }
 
-            this.effectShow && this._dom.layers.classList.add(this.effectShow);
+            this.effect?.show && this._dom.layers.classList.add(this.effect.show);
             const computedStyle = window.getComputedStyle(this._dom.layers);
 
             if (parseFloat(computedStyle.animationDuration) == 0) {
@@ -262,12 +271,12 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
             const doResolve = () => {
                 if (this._hidePromiseReject) {
                     this._hidePromiseReject = null;
-                    this.effectHide && this._dom.layers.classList.remove(this.effectHide);
+                    this.effect?.hide && this._dom.layers.classList.remove(this.effect.hide);
                     resolve(this);
                 }
             }
 
-            this.effectHide && this._dom.layers.classList.add(this.effectHide);
+            this.effect?.hide && this._dom.layers.classList.add(this.effect.hide);
             const computedStyle = window.getComputedStyle(this._dom.layers);
 
             if (parseFloat(computedStyle.animationDuration) == 0) {
@@ -289,8 +298,8 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
         .scale(delta, delta)
         .translate({x: -p.x, y: -p.y});
 
-        // update the zoom attr, after this._view.matrix is changed 
-        this.setAttr('zoom', this._view.matrix.zoom);
+        // update the _zoom after this._view.matrix is changed 
+        this._zoom = this._view.matrix.zoom;
 
         this._updatePosZoom();
     };
@@ -384,7 +393,7 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
         this.update();
     };
     private _updatePosZoom(force: boolean = false): void {
-        if (!this.interactiveMap) {
+        if (!this.interactiveMap || !this.active) {
             return;
         }
 
@@ -432,110 +441,18 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
             //!!!!this.interactiveMap.transformer.update();
         //!!!!}
     };
+    private _onPosChange(prop: keyof typeof this._pos, value: any) {
+        console.log(`Pos.${prop} changed to:`, value); //!!!
 
-    /**
-    * set css classes for the artboard element
-    */
-    private setClassName(className: string): void {
-        const prev = this.getAttr('className');
-       
-        prev && this._dom?.mapboard.classList.remove(...prev.split(' '));
-        className && this._dom?.mapboard.classList.add(...className.split(' '));
-
-        this.setAttr('className', className);
-    };
-    /**
-    * set artboard image
-    */
-    private setImage(image: HTMLImageElement | string): void {
-        if (typeof image === 'string') {
-            const imageElement = new Image();
-            imageElement.src = image;
-         
-            imageElement.onload = () => {
-                if (this._dom) {
-                    this._dom.background.replaceChildren(imageElement);
-
-                    this._setDirty('maintainAspectRatio', 'zoom');
-                    this._updatePosZoom(true);
-                    this._update();
-                }
-            }
-            imageElement.onerror = () => {
-                Util.warn(`Unable to load image for MapBoard '${Util.nodeId(this)}'.`);
-            }
-            this.setAttr('image', imageElement);
-        } else if(image instanceof HTMLImageElement) {
-            if (this._dom) {
-                this._dom.background.replaceChildren(image);
-
-                this._setDirty('maintainAspectRatio', 'zoom');
-                
-                this._updatePosZoom(true);
-                this._update();
-            }
-            this.setAttr('image', image);
-        }
-    };
-    /**
-    * set the artboard "use image size" option
-    */
-    private setUseImageSize(useImageSize: boolean): void {
-        this.setAttr('useImageSize', useImageSize);
-        this._updatePosZoom(true);
-    };
-    /**
-    * set & get artboard image width
-    */
-    private setWidth(width: number): void {
-        this.setAttr('width', width);
-        this.useImageSize = false;
-        this._updatePosZoom(true);
-        this._update();
-    };
-    private getWidth(): number {
-        if (this.useImageSize && this.image instanceof HTMLImageElement) {
-            return this.image.naturalWidth;
-        }
-        return this.getAttr('width', true) ?? DEFAULT.MAPBOARD.WIDTH;
-    };
-    /**
-    * set & get artboard image height
-    */
-    private setHeight(height: number): void {
-        this.setAttr('height', height);
-        this.useImageSize = false;
-        this._updatePosZoom(true);
-        this._update();
-    }
-    private getHeight(): number {
-        if (this.useImageSize && this.image instanceof HTMLImageElement) {
-            return this.image.naturalHeight;
-        }
-        return this.getAttr('height', true) ?? DEFAULT.MAPBOARD.HEIGHT;
-    };
-    /**
-    * set artboard zoom
-    */
-    private setZoom(zoom: ZoomType): void {
-        this.setAttr('zoom', zoom);
-        this._setDirty('zoom');
-        this._updatePosZoom(true);
-    };
-    /**
-    * set artboard position
-    */
-    private setPos(pos: Point): void {
-        this.setAttr('pos', pos);
         this._setDirty('pos');
         this._updatePosZoom(true);
     };
-    private setMaintainAspectRatio(maintainAspectRatio: boolean): void {
-        this.setAttr('maintainAspectRatio', maintainAspectRatio);
-        this._setDirty('maintainAspectRatio');
-        this._updatePosZoom(true);
+    private _onEffectChange(prop: keyof typeof this._effect, value: any) {
+        console.log(`Effect.${prop} changed to:`, value); //!!!
     };
+    //#endregion
 
+    //#region Protected
     protected _onAdd(interactiveMap: InteractiveMap): void {
         this._interactiveMap = interactiveMap;
         PicPoints.fire('mapboard:add', interactiveMap, { mapBoard: this });
@@ -544,15 +461,180 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
         this._interactiveMap = null;
         PicPoints.fire('mapboard:remove', interactiveMap, { mapBoard: this });
     };
+    //#endregion
 
+    //#region Getters & Setters
+    get className(): string | undefined {
+        return this._className;
+    };
+    set className(className: string | undefined) {
+        const prev = this._className;
+       
+        prev && this._dom?.mapboard.classList.remove(...prev.split(' '));
+        className && this._dom?.mapboard.classList.add(...className.split(' '));
+
+        this._className = className;
+    };
+    get image(): HTMLImageElement | undefined {
+        return this._image;
+    };
+    set image(image: HTMLImageElement | string | undefined) {
+        if (typeof image === 'string') {
+            const imageElement = new Image();
+            imageElement.src = image;
+         
+            imageElement.onload = () => {
+                if (this._dom) {
+                    this._dom.background.replaceChildren(imageElement);
+
+                    console.log('update image');
+                    console.log(this._maintainAspectRatio);
+                    this._setDirty('maintainAspectRatio', 'zoom');
+                    this._updatePosZoom(true);
+                    this._update();
+                }
+            }
+            imageElement.onerror = () => {
+                Util.warn(`Unable to load image for MapBoard '${Util.nodeId(this)}'.`);
+            }
+
+            this._image = imageElement;
+        } else if(image instanceof HTMLImageElement) {
+            if (this._dom) {
+                this._dom.background.replaceChildren(image);
+
+                this._setDirty('maintainAspectRatio', 'zoom');
+                this._updatePosZoom(true);
+                this._update();
+            }
+
+            this._image = image;
+        }
+    };
+    get useImageSize(): boolean {
+        return this._useImageSize;
+    };
+    set useImageSize(useImageSize: boolean) {
+        this._useImageSize = useImageSize;
+        this._updatePosZoom(true);
+    };
+    get width(): number {
+        if (this.useImageSize && this.image instanceof HTMLImageElement) {
+            return this.image.naturalWidth;
+        }
+        return this._width;
+    };
+    set width(width: number) {
+        this._width = width;
+        this._useImageSize = false;
+        this._updatePosZoom(true);
+        this._update();
+    };
+    get height(): number {
+        if (this.useImageSize && this.image instanceof HTMLImageElement) {
+            return this.image.naturalHeight;
+        }
+        return this._height;
+    };
+    set height(height: number) {
+        this._height = height;
+        this._useImageSize = false;
+        this._updatePosZoom(true);
+        this._update();
+    };
+    get pos(): Point {
+        return new Proxy(this._pos, {
+            set: (target, prop, value) => {
+                if (!(prop in target)) {
+                    return false;
+                }
+
+                const oldValue = target[prop as keyof typeof target];
+                target[prop as keyof typeof target] = value;
+
+                if (oldValue !== value) {
+                    this._onPosChange(prop as keyof typeof target, value);
+                }
+
+                return true;
+            },
+        });
+    };
+    set pos(pos: Partial<typeof this._pos>) {
+        if (typeof pos !== "object" || pos === null) {
+            Util.throw('Pos must be an object.');
+        }
+
+        Object.assign(this._pos, pos);
+
+        for (const key in pos) {
+            if (key in this._pos) {
+                this._onPosChange(
+                    key as keyof typeof this._pos,
+                    pos[key as keyof typeof pos]
+                );
+            }
+        }
+    }
+    get zoom(): ZoomType {
+        return this._zoom;
+    };
+    set zoom(zoom: ZoomType) {
+        this._zoom = zoom;
+        this._setDirty('zoom');
+        this._updatePosZoom(true);
+    };
+    get maintainAspectRatio(): boolean {
+        return this._maintainAspectRatio;
+    };
+    set maintainAspectRatio(maintainAspectRatio: boolean) {
+        this._maintainAspectRatio = maintainAspectRatio;
+        this._setDirty('maintainAspectRatio');
+        this._updatePosZoom(true);
+    };
+    get effect(): EffectOptions {
+        return new Proxy(this._effect, {
+            set: (target, prop, value) => {
+                if (!(prop in target)) {
+                    return false;
+                }
+
+                const oldValue = target[prop as keyof typeof target];
+                target[prop as keyof typeof target] = value;
+
+                if (oldValue !== value) {
+                    this._onEffectChange(prop as keyof typeof target, value);
+                }
+
+                return true;
+            },
+        });
+    };
+    set effect(effect: EffectOptions) {
+        if (typeof effect !== "object" || effect === null) {
+            Util.throw('Effect must be an object.');
+        }
+
+        Object.assign(this._effect, effect);
+
+        for (const key in effect) {
+            if (key in this._effect) {
+                this._onEffectChange(
+                    key as keyof typeof this._effect,
+                    effect[key as keyof typeof effect]
+                );
+            }
+        }
+    };
     get active(): boolean {
         return this._active;
     };
-
     get interactiveMap(): InteractiveMap | null {
         return this._interactiveMap;
     };
-    
+    //#endregion
+
+    //#region Public
     /**
     * get the current zoom level of the artboard
     */
@@ -585,7 +667,6 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
 
         return bbox;
     };
-
     show(): void {
         if (!this.interactiveMap?.hasChild(this)) {
             Util.warn(`MapBoard '${Util.nodeId(this)}' is not assigned to InteractiveMap. The 'show' operation was ignored.`);
@@ -646,10 +727,9 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
              shape.update();
         });
     };
+    //#endregion
 
-    //==============================================================
-    // This block of methods represents the implementation of the IContainer interface.
-    //==============================================================
+    //#region Implementation of the IContainer interface
     forEach(callbackFn: (child: Shape) => void): void {
         this._shapes.forEach(callbackFn);
     };
@@ -801,4 +881,5 @@ export class MapBoard<Config extends MapBoardConfig = MapBoardConfig> extends No
 
         return movedNodes;
     };
+    //#endregion
 };

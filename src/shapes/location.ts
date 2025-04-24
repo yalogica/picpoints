@@ -1,6 +1,5 @@
 import { PicPoints } from '@/picpoints';
 import { Util } from '@/util';
-import { Factory } from '@/factory';
 import { BBox } from '@/bbox';
 import { NodeType, SVG_NS, DEFAULT } from '@/types';
 import { Shape, ShapeConfig } from '@/shapes/shape';
@@ -27,7 +26,6 @@ export class Location<Config extends LocationConfig = LocationConfig> extends Sh
 
         PicPoints.fire('shape:ready', this, { shape: this });
     };
-
     private _buildDOM(): void {
         this._dom.container.setAttribute('data-id', this.id);
         this._dom.container.setAttribute('data-type', this.type.toLowerCase());
@@ -39,11 +37,9 @@ export class Location<Config extends LocationConfig = LocationConfig> extends Sh
             return;
         }
     };
-
     getContainer(): HTMLDivElement {
         return this._dom.container;
     };
-
     getBBox(): BBox {
         const bbox = new BBox(0, 0, 0, 0);
         return bbox;

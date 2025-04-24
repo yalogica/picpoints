@@ -1,15 +1,13 @@
 import { PicPoints } from '@/picpoints';
-import { coreNodeAdd, coreNodeRemove } from './core';
-import { Util } from '@/util';
 import { NodeType } from '@/types';
-import { Factory } from '@/factory';
+import { coreNodeAdd, coreNodeRemove } from './core';
 import { customAlphabet } from 'nanoid';
 
 
 export interface NodeConfig {
   id?: string;
   name?: string;
-  className?: string | string[];
+  className?: string;
 };
 
 export const nodeOnAdd = Symbol('onAdd');
@@ -17,12 +15,11 @@ export const nodeOnRemove = Symbol('onRemove');
 
 export abstract class Node<Config extends NodeConfig = NodeConfig> {
     protected _nodeType: NodeType = NodeType.Node;
-    protected _id: string;
     protected _parent: Node | null = null;
-    protected _attrs: any = {};
-
-    name?: string;
-    className?: string | string[];
+    
+    private _id: string;
+    protected _name?: string;
+    protected _className?: string;
 
     constructor(config?: Config) {
         if (config?.id) {
@@ -33,12 +30,7 @@ export abstract class Node<Config extends NodeConfig = NodeConfig> {
             this._id = nanoid();
         }
 
-        // on initial set attrs wi don't need to fire change events
-        // because nobody is listening to them yet
-        this.setAttrs(config);
-
-        Factory.addGetterSetterAndInitialize(this, 'name');
-        Factory.addGetterSetterAndInitialize(this, 'className');
+        this._name = config?.name;
     };
     
     private [nodeOnAdd](parent: Node): void {
@@ -55,75 +47,26 @@ export abstract class Node<Config extends NodeConfig = NodeConfig> {
     protected _onAdd(parent: Node): void {};
     protected _onRemove(parent: Node): void {};
 
-    /**
-    * Get the node id
-    */
+    //#region Getters & Setters
     get id(): string {
         return this._id;
     };
-    /**
-    * Get the node type, which may return Stage, Artboard, Group, or shape types
-    */
+    get name(): string | undefined {
+        return this._name;
+    };
+    set name(name: string | undefined) {
+        this._name = name;
+    };
+    get className(): string | undefined {
+        return this._className;
+    };
     get type(): NodeType {
         return this._nodeType;
     };
-    /**
-    * Get the node parent container
-    */
     get parent(): Node | null {
         return this._parent;
     };
-       
-    /**
-    * set multiple attrs at once using an object literal
-    * @example
-    * node.setAttrs({
-    *   x: 5,
-    *   fill: 'red'
-    * });
-    */
-    setAttrs(config?: Config): this {
-        if (!config) {
-            return this;
-        }
-
-        for (let key in config) {
-            this.setAttr(key, config[key]);
-        }
-        
-        return this;
-    };
-    /**
-    * set one attr
-    * @example
-    * node.setAttr('x', 5);
-    */
-    setAttr(key: string, val: any): void {
-        const oldVal = this._attrs[key];
-        if (oldVal === val && !Util.isObject(val)) {
-          return;
-        }
-        if (val === undefined || val === null) {
-          delete this._attrs[key];
-        } else {
-          this._attrs[key] = val;
-        }
-    };
-    /**
-    * get attr
-    * @example
-    * var x = node.getAttr('x');
-    */
-    getAttr(attr: string, direct: boolean = false) {
-        if (!direct) {
-            const method = 'get' + Util.capitalize(attr);
-            if (Util.isFunction((this as any)[method])) {
-                return (this as any)[method]();
-            }
-        }
-        // otherwise get directly
-        return this._attrs[attr];
-    };
+    //#endregion
     
     abstract update(): void;
 };

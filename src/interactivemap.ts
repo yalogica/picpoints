@@ -1,7 +1,5 @@
 import { PicPoints } from '@/picpoints';
 import { Util } from '@/util';
-import { Factory } from '@/factory';
-import { BBox } from '@/bbox';
 import { NodeType, Point, ViewMode, DEFAULT } from '@/types';
 import { Node, NodeConfig, nodeOnAdd, nodeOnRemove } from '@/node';
 import { IContainer } from '@/container';
@@ -41,23 +39,23 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
     private _pendingMapBoards: MapBoard[]  = [];
     private _resizeObserver: ResizeObserver | null;
 
-    container: HTMLDivElement;
-    mode: ViewMode;
-    interactivePan: boolean;
-    interactiveZoom: boolean;
-    usePanZoomOnSpaceHold: boolean;
-    selectAndTransform: boolean;
+    private _container: HTMLDivElement;
+    private _mode: ViewMode;
+    private _interactivePan: boolean;
+    private _interactiveZoom: boolean;
+    private _usePanZoomOnSpaceHold: boolean;
+    private _selectAndTransform: boolean;
 
     constructor(config?: Config) {
         super(config);
 
-        Factory.addGetterSetterAndInitialize(this, "className");
-        Factory.addGetterSetterAndInitialize(this, "container");
-        Factory.addGetterSetterAndInitialize(this, "mode", DEFAULT.INTERACTIVEMAP.MODE);
-        Factory.addGetterSetterAndInitialize(this, "interactivePan", DEFAULT.INTERACTIVEMAP.INTERACTIVE_PAN);
-        Factory.addGetterSetterAndInitialize(this, "interactiveZoom", DEFAULT.INTERACTIVEMAP.INTERACTIVE_ZOOM);
-        Factory.addGetterSetterAndInitialize(this, "usePanZoomOnSpaceHold", DEFAULT.INTERACTIVEMAP.USE_PANZOOM_ON_SPACE_HOLD);
-        Factory.addGetterSetterAndInitialize(this, "selectAndTransform", DEFAULT.INTERACTIVEMAP.SELECT_AND_TRANSFORM);
+        this.className = config?.className;
+        this.container = config?.container ?? '';
+        this.mode = config?.mode ?? DEFAULT.INTERACTIVEMAP.MODE;
+        this.interactivePan = config?.interactivePan ?? DEFAULT.INTERACTIVEMAP.INTERACTIVE_PAN;
+        this.interactiveZoom = config?.interactiveZoom ?? DEFAULT.INTERACTIVEMAP.INTERACTIVE_ZOOM;
+        this.usePanZoomOnSpaceHold = config?.usePanZoomOnSpaceHold ?? DEFAULT.INTERACTIVEMAP.USE_PANZOOM_ON_SPACE_HOLD;
+        this.selectAndTransform = config?.selectAndTransform ?? DEFAULT.INTERACTIVEMAP.SELECT_AND_TRANSFORM;
 
         this._panzoom = new PanZoom(this);
         //!!!this._transformer = new Transformer(this);
@@ -66,6 +64,7 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
         this._buildDOM();
         this._bind();
     };
+
     private _buildDOM(): void {
         const container = this.container;
         if (!container) {
@@ -122,23 +121,22 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
         this._activeMapBoard?.resize();
     };
 
-    /**
-    * set css classes for the InteractiveMap element
-    */
-    private setClassName(className: string): this {
-        const prev = this.getAttr('className');
+    //#region Getters & Setters
+    get className(): string | undefined {
+        return this._className;
+    };
+    set className(className: string | undefined) {
+        const prev = this._className;
        
         prev && this._dom?.interactiveMap.classList.remove(...prev.split(' '));
         className && this._dom?.interactiveMap.classList.add(...className.split(' '));
 
-        this.setAttr('className', className);
-
-        return this;
+        this._className = className;
     };
-    /**
-    * set container dom element which contains the stage wrapper div element
-    */
-    private setContainer(container: HTMLDivElement | string): this {
+    get container(): HTMLDivElement {
+        return this._container;
+    };
+    set container(container: HTMLDivElement | string) {
         if (typeof container === 'string') {
             if (container.charAt(0) === '.') {
                 const className = container.slice(1);
@@ -158,19 +156,45 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
             }
         }
 
-        this.setAttr('container', container);
-    
+        this._container = container;
+
         if (this._dom && this._dom.container && this._dom.interactiveMap) {
             if (this._dom.interactiveMap.parentElement) {
                 this._dom.interactiveMap.parentElement.removeChild(this._dom.interactiveMap);
             }
             this._dom.container.appendChild(this._dom.interactiveMap);
         }
-
-        return this;
     };
-
-
+    get mode(): ViewMode {
+        return this._mode;
+    };
+    set mode(mode: ViewMode) {
+        this._mode = mode;
+    };
+    get interactivePan(): boolean {
+        return this._interactivePan;
+    };
+    set interactivePan(interactivePan: boolean) {
+        this._interactivePan = interactivePan;
+    };
+    get interactiveZoom(): boolean {
+        return this._interactiveZoom;
+    };
+    set interactiveZoom(interactiveZoom: boolean) {
+        this._interactiveZoom = interactiveZoom;
+    };
+    get usePanZoomOnSpaceHold(): boolean {
+        return this._usePanZoomOnSpaceHold;
+    };
+    set usePanZoomOnSpaceHold(usePanZoomOnSpaceHold: boolean) {
+        this._usePanZoomOnSpaceHold = usePanZoomOnSpaceHold;
+    };
+    get selectAndTransform(): boolean {
+        return this._selectAndTransform;
+    };
+    set selectAndTransform(selectAndTransform: boolean) {
+        this._selectAndTransform = selectAndTransform;
+    };
     get activeMapBoard(): MapBoard | null {
         return this._activeMapBoard;
     };
@@ -180,10 +204,12 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
             y: this._dom.interactiveMap.clientHeight / 2
         }
     };
+    //#endregion
     //!!!get transformer(): Transformer {
         //return this._transformer;
     //};
 
+    //#region Public
     /**
     * Retrieves the DOM element that serves as the inner container for the InteractiveMap.
     * This element is typically used to render or manipulate the visual components of the InteractiveMap.
@@ -194,7 +220,7 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
      /**
     * Displays the specified artboard on the stage
     */
-     show(mapBoard: MapBoard | string, force?: boolean): void {
+    show(mapBoard: MapBoard | string, force?: boolean): void {
         const foundNode = this.getChild(mapBoard);
         if (!foundNode) {
             Util.warn(`MapBoard '${Util.nodeId(mapBoard)}' not found in InteractiveMap '${Util.nodeId(this)}'. The 'show' operation was ignored.`);
@@ -265,10 +291,9 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
         //!!!this._selector.destroy();
         //this._transformer.destroy();
     };
+    //#endregion
 
-    //==============================================================
-    // This block of methods represents the implementation of the IContainer interface.
-    //==============================================================
+    //#region Implementation of the IContainer interface
     forEach(callbackFn: (child: MapBoard) => void): void {
         this._mapBoards.forEach(callbackFn);
     };
@@ -423,4 +448,5 @@ export class InteractiveMap<Config extends InteractiveMapConfig = InteractiveMap
 
         return movedNodes;
     };
+    //#endregion
 };

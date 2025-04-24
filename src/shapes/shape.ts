@@ -66,15 +66,19 @@ export abstract class Shape<Config extends ShapeConfig = ShapeConfig> extends No
         this._mapBoard = null;
     };
 
+    //==============================================================
+    // Getters & Setters
+    //==============================================================
     get active(): boolean {
         return this._mapBoard?.active ?? false;
     };
-
     get mapBoard(): MapBoard | null {
         return this._mapBoard;
     };
 
-
+    //==============================================================
+    // Public
+    //==============================================================
     remove(): boolean {
         if (this.parent) {
             if (this.parent.type === NodeType.MapBoard) {

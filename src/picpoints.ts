@@ -1,4 +1,3 @@
-import '@/styles.scss';
 import { Util } from '@/util';
 import { Core } from '@/core';
 import { Node } from '@/node';

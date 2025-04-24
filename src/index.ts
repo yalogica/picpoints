@@ -6,7 +6,7 @@
  * Copyright (C) 2024 by Max Lawrence (Yalogica)
  */
 export { PicPoints } from '@/picpoints';
-export { ViewMode } from '@/types';
+export { ViewMode, type AnchorType } from '@/types';
 export { Node, type NodeConfig } from '@/node';
 export { InteractiveMap, type InteractiveMapConfig } from '@/interactivemap';
 export { MapBoard, type MapBoardConfig } from '@/mapboard';

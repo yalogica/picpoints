@@ -19,6 +19,17 @@ export enum ViewMode {
 
 export type ZoomType = number | 'contain' | 'cover';
 
+export type AnchorType = 
+    'top-left' | 
+    'top-center' | 
+    'top-right' | 
+    'center-left' | 
+    'center' | 
+    'center-right' | 
+    'bottom-left' | 
+    'bottom-center' | 
+    'bottom-right';
+
 export type Point = { 
     x: number; 
     y: number;
@@ -43,7 +54,12 @@ export const DEFAULT = {
         WIDTH: 0,
         HEIGHT: 0,
         USE_IMAGE_SIZE: true,
-        MAINTAIN_ASPECT_RATIO: false
+        MAINTAIN_ASPECT_RATIO: false,
+        EFFECT: {
+            show: undefined,
+            hide: undefined,
+            duration: undefined
+        }
     },
     SHAPE: {
         X: 0,
