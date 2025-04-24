@@ -1,0 +1,11 @@
+{
+    "compilerOptions": {
+        "strict": true,
+      
+        "baseUrl": ".",
+        "paths": {
+            "picpoints": ["../dist/types/index.d.ts"],
+            "picpoints/*": ["../dist/types/*"]
+        }
+    }
+}
