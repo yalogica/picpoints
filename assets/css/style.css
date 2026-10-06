@@ -1,0 +1,252 @@
+.picpoints-app-preloading .picpoints-app-container {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-orient: vertical;
+  -webkit-box-direction: normal;
+  -ms-flex-direction: column;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+}
+.picpoints-app-preloading .picpoints-header,
+.picpoints-app-preloading .picpoints-data {
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  border: none;
+  background-color: lightgray;
+}
+.picpoints-app-preloading .picpoints-header::after,
+.picpoints-app-preloading .picpoints-data::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: -webkit-gradient(linear, left top, right top, from(rgba(255, 255, 255, 0)), color-stop(20%, rgba(255, 255, 255, 0.3)), color-stop(40%, rgba(255, 255, 255, 0.5)), color-stop(60%, rgba(255, 255, 255, 0.3)), color-stop(80%, rgba(255, 255, 255, 0)));
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 20%, rgba(255, 255, 255, 0.5) 40%, rgba(255, 255, 255, 0.3) 60%, rgba(255, 255, 255, 0) 80%);
+  -webkit-transform: translateX(-100%);
+  transform: translateX(-100%);
+  -webkit-animation: picpoints-fx-skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  animation: picpoints-fx-skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.picpoints-app-preloading .picpoints-header,
+.picpoints-app-preloading .picpoints-data {
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+}
+.picpoints-app-preloading .picpoints-header {
+  position: relative;
+  height: 44px;
+  width: 300px;
+}
+.picpoints-app-preloading .picpoints-data {
+  position: relative;
+  -webkit-box-flex: 1;
+  -ms-flex-positive: 1;
+  flex-grow: 1;
+}
+
+@-webkit-keyframes picpoints-fx-skeleton-shimmer {
+  0% {
+    -webkit-transform: translateX(-100%);
+    transform: translateX(-100%);
+  }
+  100% {
+    -webkit-transform: translateX(100%);
+    transform: translateX(100%);
+  }
+}
+
+@keyframes picpoints-fx-skeleton-shimmer {
+  0% {
+    -webkit-transform: translateX(-100%);
+    transform: translateX(-100%);
+  }
+  100% {
+    -webkit-transform: translateX(100%);
+    transform: translateX(100%);
+  }
+}
+#picpoints-app {
+  position: relative;
+  padding: 0 10px 0 0;
+  height: calc(100vh - 32px - 20px);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+}
+@media screen and (max-width: 782px) {
+  #picpoints-app {
+    padding: 0 10px 0 0;
+    padding-left: 0;
+    height: calc(100vh - 46px - 20px);
+  }
+}
+
+.picpoints-app-container dd, .picpoints-app-container li,
+.picpoints-portal-container dd,
+.picpoints-portal-container li {
+  margin: unset;
+}
+.picpoints-app-container h1, .picpoints-app-container h2, .picpoints-app-container h3,
+.picpoints-portal-container h1,
+.picpoints-portal-container h2,
+.picpoints-portal-container h3 {
+  margin: unset;
+  padding: unset;
+}
+.picpoints-app-container button,
+.picpoints-portal-container button {
+  -webkit-margin-start: 0;
+  margin-inline-start: 0;
+  -webkit-margin-end: 0;
+  margin-inline-end: 0;
+}
+.picpoints-app-container p,
+.picpoints-portal-container p {
+  margin: unset;
+  padding: unset;
+  font-size: unset;
+  line-height: unset;
+}
+.picpoints-app-container a:focus,
+.picpoints-portal-container a:focus {
+  -webkit-box-shadow: unset;
+  box-shadow: unset;
+  outline: unset;
+}
+.picpoints-app-container input[type=number]:focus,
+.picpoints-portal-container input[type=number]:focus {
+  border-color: inherit;
+  outline: unset;
+}
+
+.picpoints-guide .picpoints-header {
+  position: relative;
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  -webkit-box-pack: justify;
+  -ms-flex-pack: justify;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0 0 10px 0;
+}
+.picpoints-guide .picpoints-header .picpoints-title {
+  display: -webkit-box;
+  display: -ms-flexbox;
+  display: flex;
+  -webkit-box-pack: center;
+  -ms-flex-pack: center;
+  justify-content: center;
+  -webkit-box-align: center;
+  -ms-flex-align: center;
+  align-items: center;
+  gap: 0.5rem;
+  white-space: nowrap;
+}
+.picpoints-guide .picpoints-header .picpoints-title span {
+  line-height: 1.3333333333;
+  font-size: 1.5rem;
+  font-weight: bold;
+  text-shadow: 1px 1px 0 #fff;
+}
+.picpoints-guide .picpoints-header .picpoints-title sup {
+  position: relative;
+  top: -0.75rem;
+  font-size: 12px;
+  font-weight: bold;
+  text-shadow: none;
+  text-transform: uppercase;
+  vertical-align: baseline;
+}
+.picpoints-guide .picpoints-header .picpoints-title svg {
+  width: 40px;
+  height: 40px;
+}
+.picpoints-guide .picpoints-header .picpoints-title svg path {
+  fill: currentColor !important;
+}
+.picpoints-guide .picpoints-content {
+  min-width: 900px;
+  max-width: 900px;
+  position: relative;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  -webkit-box-shadow: 0px 2px 1px rgba(0, 0, 0, 0.05), 0px 0px 1px rgba(0, 0, 0, 0.25);
+  box-shadow: 0px 2px 1px rgba(0, 0, 0, 0.05), 0px 0px 1px rgba(0, 0, 0, 0.25);
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+.picpoints-guide .picpoints-content video {
+  display: block;
+  margin: 0 auto;
+  padding: 20px;
+  background-color: #fff;
+  border-radius: 8px;
+  -webkit-box-shadow: 0px 0px 1px rgba(0, 0, 0, 0.7);
+  box-shadow: 0px 0px 1px rgba(0, 0, 0, 0.7);
+  -webkit-box-sizing: border-box;
+  box-sizing: border-box;
+}
+.picpoints-guide .picpoints-content h2, .picpoints-guide .picpoints-content h3, .picpoints-guide .picpoints-content p, .picpoints-guide .picpoints-content ul {
+  margin: 20px 0;
+}
+.picpoints-guide .picpoints-content h2, .picpoints-guide .picpoints-content h3 {
+  font-size: 18px;
+}
+.picpoints-guide .picpoints-content h2:first-child, .picpoints-guide .picpoints-content h3:first-child {
+  margin-top: 0;
+}
+.picpoints-guide .picpoints-content p, .picpoints-guide .picpoints-content li {
+  font-size: 14px;
+}
+.picpoints-guide .picpoints-guide-video {
+  aspect-ratio: 16/9;
+  width: 100%;
+  max-width: 100%;
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+  -webkit-box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+.picpoints-guide .picpoints-guide-video iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.fs-notice,
+.notice {
+  margin-left: 0 !important;
+  margin-right: 10px !important;
+}
+
+#wpcontent {
+  padding: 0 0 0 10px;
+  background: #f0f0f1;
+}
+
+#wpbody-content {
+  padding: 10px 0 10px 0;
+}
+
+#wpfooter {
+  display: none;
+}
+
+div[role=tree]:focus {
+  border: none;
+  outline: none;
+}

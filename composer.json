@@ -1,0 +1,12 @@
+{
+  "name": "yalogica/picpoints",
+  "autoload": {
+    "psr-4": {
+      "Yalogica\\PicPoints\\": "includes/"
+    }
+  },
+  "require": {
+    "php": ">=7.4",
+    "freemius/wordpress-sdk": "^2.13"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://schemas.wp.org/trunk/block.json",
+  "apiVersion": 3,
+  "name": "picpoints/map-embed",
+  "title": "PicPoints Embed",
+  "description": "Embed an interactive map built with PicPoints.",
+  "category": "media",
+  "icon": "format-gallery",
+  "keywords": ["picpoints", "interactive map", "imagemap"],
+  "textdomain": "picpoints",
+  "attributes": {
+    "mapId": { "type": "number", "default": 0 },
+    "width": { "type": "string", "default": "" },
+    "height": { "type": "string", "default": "" },
+    "sceneid": { "type": "string", "default": "" }
+  },
+  "supports": {
+    "html": false,
+    "align": ["wide", "full"]
+  },
+  "editorScript": "picpoints-embed-block-editor"
+}

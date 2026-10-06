@@ -1,0 +1,185 @@
+#, fuzzy
+msgid ""
+msgstr ""
+"Plural-Forms: nplurals=INTEGER; plural=EXPRESSION;\n"
+"Project-Id-Version: PicPoints\n"
+"POT-Creation-Date: 2026-05-27 17:14+0300\n"
+"PO-Revision-Date: 2025-04-18 17:59+0300\n"
+"Last-Translator: \n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Generator: Poedit 2.4.3\n"
+"X-Poedit-Basepath: ..\n"
+"X-Poedit-Flags-xgettext: --add-comments=translators:\n"
+"X-Poedit-WPHeader: picpoints.php\n"
+"X-Poedit-SourceCharset: UTF-8\n"
+"X-Poedit-KeywordsList: __;_e;_n:1,2;_x:1,2c;_ex:1,2c;_nx:4c,1,2;esc_attr__;"
+"esc_attr_e;esc_attr_x:1,2c;esc_html__;esc_html_e;esc_html_x:1,2c;"
+"_n_noop:1,2;_nx_noop:3c,1,2;__ngettext_noop:1,2\n"
+"X-Poedit-SearchPath-0: .\n"
+"X-Poedit-SearchPathExcluded-0: assets\n"
+"X-Poedit-SearchPathExcluded-1: monorepo\n"
+"X-Poedit-SearchPathExcluded-2: vendor\n"
+
+#: includes/Rest/Controllers/DataController.php:185
+#: includes/Rest/Controllers/DataController.php:240
+msgid "Map data has been retrieved."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:192
+#: includes/Rest/Controllers/DataController.php:197
+#: includes/Rest/Controllers/DataController.php:247
+#: includes/Rest/Controllers/DataController.php:252
+msgid "Failed to get map data."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:215
+msgid "Maps have been retrieved."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:222
+#: includes/Rest/Controllers/DataController.php:227
+msgid "Failed to get maps."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:266
+msgid "Map data has been saved."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:270
+#: includes/Rest/Controllers/DataController.php:275
+msgid "Failed to save map data."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:288
+msgid "Map has been deleted."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:292
+#: includes/Rest/Controllers/DataController.php:297
+msgid "Failed to delete map."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:310
+msgid "Map has been copied."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:317
+#: includes/Rest/Controllers/DataController.php:322
+msgid "Failed to copy map."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:336
+msgid "Map status has been updated."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:340
+#: includes/Rest/Controllers/DataController.php:345
+msgid "Failed to update map status."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:356
+msgid "Icon sets have been retrieved."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:361
+#: includes/Rest/Controllers/DataController.php:366
+msgid "Failed to get icon sets."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:379
+msgid "Icons have been retrieved."
+msgstr ""
+
+#: includes/Rest/Controllers/DataController.php:384
+#: includes/Rest/Controllers/DataController.php:389
+msgid "Failed to get icons."
+msgstr ""
+
+#: includes/System/Admin.php:33
+msgid "PicPoints Items"
+msgstr ""
+
+#: includes/System/Admin.php:34
+msgid "PicPoints Item"
+msgstr ""
+
+#. Plugin Name of the plugin/theme
+#: includes/System/Admin.php:56 includes/System/Admin.php:57
+#: includes/System/Admin.php:66
+msgid "PicPoints"
+msgstr ""
+
+#: includes/System/Admin.php:57
+msgid "All Maps"
+msgstr ""
+
+#: includes/System/Admin.php:67
+msgid "Add New"
+msgstr ""
+
+#: includes/System/Admin.php:103 includes/System/Admin.php:111
+#: includes/System/Admin.php:153
+msgid "Sorry, you are not allowed to access this page."
+msgstr ""
+
+#: includes/System/Admin.php:104 includes/System/Admin.php:112
+#: includes/System/Admin.php:154 includes/System/Admin.php:162
+msgid "Access Denied"
+msgstr ""
+
+#. translators: %d: maximum number of maps
+#: includes/System/Admin.php:126
+#, php-format
+msgid ""
+"You have reached the maximum limit of %d maps on the free plan. Please "
+"upgrade to PicPoints Pro to create more maps."
+msgstr ""
+
+#: includes/System/Admin.php:129
+msgid "Upgrade Required"
+msgstr ""
+
+#: includes/System/Admin.php:139
+msgid ""
+"Failed to create a new map. Please try again or check your server logs for "
+"more details."
+msgstr ""
+
+#: includes/System/Admin.php:140
+msgid "Server Error"
+msgstr ""
+
+#: includes/System/Admin.php:161
+msgid ""
+"Sorry, you are not allowed to manage plugin settings. Only administrators "
+"can access this page."
+msgstr ""
+
+#: includes/System/Shortcode.php:48
+msgid "PicPoints: interactive map ID not defined."
+msgstr ""
+
+#: includes/System/Shortcode.php:53
+msgid "PicPoints: interactive map not found."
+msgstr ""
+
+#. Plugin URI of the plugin/theme
+msgid "https://yalogica.com/picpoints"
+msgstr ""
+
+#. Description of the plugin/theme
+msgid ""
+"PicPoints is a plugin that enables you add interactive maps and clickable "
+"infographics to your WordPress website."
+msgstr ""
+
+#. Author of the plugin/theme
+msgid "Yalogica"
+msgstr ""
+
+#. Author URI of the plugin/theme
+msgid "https://yalogica.com"
+msgstr ""
