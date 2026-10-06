@@ -32,7 +32,6 @@ It runs on a modern React + Shadow DOM architecture: blazing-fast loading, smoot
   fit-to-screen, zoom controls
 
 **PicPoints Pro** adds unlimited scenes and layers, SVG import from Illustrator or Inkscape, Handlebars templates, custom JS & CSS sections, and a developer API for professional agencies and growing businesses.
-[Try Pro free for 7 days — no credit card required.](https://yalogica.com/picpoints/)
 
 ## Installation
 
