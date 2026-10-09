@@ -21412,6 +21412,16 @@
           layer.hidden = !layer.hidden;
         }));
       },
+      toggleLock: id => {
+        set(produce(draft => {
+          const layer = draft.layers.entities[id];
+          if (!layer) {
+            console.warn(`Layer with id ${id} doesn"t exist`);
+            return;
+          }
+          layer.lock = !layer.lock;
+        }));
+      },
       toggleTooltip: id => {
         set(produce(draft => {
           const layer = draft.layers.entities[id];
@@ -21869,7 +21879,7 @@
                 parentId: parent,
                 name: node.name,
                 hidden: node.hidden,
-                static: node.static,
+                nonInteractive: node.nonInteractive,
                 className: node.className,
                 attributes: node.attributes,
                 tooltip: node.tooltip,
@@ -21890,7 +21900,7 @@
                 parentId: parent,
                 name: node.name,
                 hidden: node.hidden,
-                static: node.static,
+                nonInteractive: node.nonInteractive,
                 className: node.className,
                 attributes: node.attributes,
                 object: node.object
@@ -21958,6 +21968,14 @@
       parentId: void 0,
       pos: 0
     };
+  };
+  const isLayerLocked = (layers, id) => {
+    let current = layers[id];
+    while (current) {
+      if (current.lock) return true;
+      current = current.parentId ? layers[current.parentId] : void 0;
+    }
+    return false;
   };
   const useAppStore = create$3(set => ({
     interactiveMap: {
@@ -25466,7 +25484,7 @@
                   parentId: parentId,
                   name: layer.name,
                   hidden: layer.hidden,
-                  static: layer.static,
+                  nonInteractive: layer.nonInteractive,
                   className: layer.className,
                   attributes: layer.attributes,
                   tooltip: layer.tooltip,
@@ -25486,7 +25504,7 @@
                   parentId: parentId,
                   name: layer.name,
                   hidden: layer.hidden,
-                  static: layer.static,
+                  nonInteractive: layer.nonInteractive,
                   className: layer.className,
                   attributes: layer.attributes,
                   object: {
@@ -38736,6 +38754,7 @@
     const lastSelectedLayerId = useLayoutStore(s => s.lastSelectedLayerId);
     const toggleCollapsed = useLayerStore(s => s.actions.toggleCollapsed);
     const toggleHidden = useLayerStore(s => s.actions.toggleHidden);
+    const toggleLock = useLayerStore(s => s.actions.toggleLock);
     const {setNodeRef: setNodeRef, attributes: attributes, listeners: listeners} = useSortable({
       id: flattenLayer.id
     });
@@ -38850,14 +38869,36 @@
           }), (hasTooltip || isTooltipInherit) && jsxRuntimeExports.jsx(Icons.Tooltip, {
             size: 16,
             className: cn("group-hover:hidden", isTooltipInherit && "text-green-600! fill-green-600/30!")
-          }), jsxRuntimeExports.jsx("div", {
-            className: cn("hidden group-hover:block", layer.hidden && "block"),
-            onClick: () => toggleHidden(layer.id),
-            children: layer.hidden ? jsxRuntimeExports.jsx(Icons.EyeOff, {
-              size: 16
-            }) : jsxRuntimeExports.jsx(Icons.Eye, {
-              size: 16
-            })
+          }), jsxRuntimeExports.jsxs(Tooltip, {
+            children: [ jsxRuntimeExports.jsx(TooltipTrigger, {
+              asChild: true,
+              children: jsxRuntimeExports.jsx("div", {
+                className: cn("hidden group-hover:block", layer.hidden && "block"),
+                onClick: () => toggleHidden(layer.id),
+                children: layer.hidden ? jsxRuntimeExports.jsx(Icons.EyeOff, {
+                  size: 16
+                }) : jsxRuntimeExports.jsx(Icons.Eye, {
+                  size: 16
+                })
+              })
+            }), jsxRuntimeExports.jsx(TooltipContent, {
+              children: "Show/hide"
+            }) ]
+          }), jsxRuntimeExports.jsxs(Tooltip, {
+            children: [ jsxRuntimeExports.jsx(TooltipTrigger, {
+              asChild: true,
+              children: jsxRuntimeExports.jsx("div", {
+                className: cn("hidden group-hover:block", layer.lock && "block"),
+                onClick: () => toggleLock(layer.id),
+                children: layer.lock ? jsxRuntimeExports.jsx(Icons.Lock, {
+                  size: 16
+                }) : jsxRuntimeExports.jsx(Icons.LockOpen, {
+                  size: 16
+                })
+              })
+            }), jsxRuntimeExports.jsx(TooltipContent, {
+              children: "Lock/unlock"
+            }) ]
           }) ]
         }) ]
       }), dropPosition === DragPosition.After && jsxRuntimeExports.jsx(DropIndicator$1, {
@@ -65832,10 +65873,11 @@
     const renderNode = node => {
       const layer = layers[node.id];
       if (!layer || layer.sceneId !== sceneId) return null;
+      const stateClass = cn(layer.hidden && "pointer-none opacity-0", isLayerLocked(layers, layer.id) && "pointer-none");
       if (layer.type === LayerType$1.Group) {
         return jsxRuntimeExports.jsx("g", {
           "data-layer-id": layer.id,
-          className: cn(layer.hidden && "pointer-none opacity-0"),
+          className: stateClass,
           children: node.children.slice().reverse().map(child => renderNode(child))
         }, layer.id);
       }
@@ -65845,35 +65887,35 @@
           return jsxRuntimeExports.jsx(ImageLayer$1, {
             layerId: layer.id,
             object: layer.object,
-            className: cn(layer.hidden && "pointer-none opacity-0")
+            className: stateClass
           }, layer.id);
 
          case ObjectType$1.Text:
           return jsxRuntimeExports.jsx(TextLayer$1, {
             layerId: layer.id,
             object: layer.object,
-            className: cn(layer.hidden && "pointer-none opacity-0")
+            className: stateClass
           }, layer.id);
 
          case ObjectType$1.Rectangle:
           return jsxRuntimeExports.jsx(RectangleLayer$1, {
             layerId: layer.id,
             object: layer.object,
-            className: cn(layer.hidden && "pointer-none opacity-0")
+            className: stateClass
           }, layer.id);
 
          case ObjectType$1.Ellipse:
           return jsxRuntimeExports.jsx(EllipseLayer$1, {
             layerId: layer.id,
             object: layer.object,
-            className: cn(layer.hidden && "pointer-none opacity-0")
+            className: stateClass
           }, layer.id);
 
          case ObjectType$1.Polygon:
           return jsxRuntimeExports.jsx(PolygonLayer$1, {
             layerId: layer.id,
             object: layer.object,
-            className: cn(layer.hidden && "pointer-none opacity-0")
+            className: stateClass
           }, layer.id);
         }
       }
@@ -65899,10 +65941,11 @@
     const renderNode = node => {
       const layer = layers[node.id];
       if (!layer || layer.sceneId !== sceneId) return null;
+      const stateClass = cn(layer.hidden && "pointer-none opacity-0", isLayerLocked(layers, layer.id) && "pointer-none");
       if (layer.type === LayerType$1.Group) {
         return jsxRuntimeExports.jsx("div", {
           "data-layer-id": layer.id,
-          className: cn(layer.hidden && "pointer-none opacity-0"),
+          className: stateClass,
           children: node.children.slice().reverse().map(child => renderNode(child))
         }, layer.id);
       } else {
@@ -65912,7 +65955,7 @@
             return jsxRuntimeExports.jsx(MarkerLayer$1, {
               layerId: layer.id,
               object: layer.object,
-              className: cn(layer.hidden && "pointer-none opacity-0")
+              className: stateClass
             }, layer.id);
           }
         }
@@ -66292,7 +66335,7 @@
     }
     findLayersInRect(rect) {
       const layerStore = useLayerStore.getState();
-      const layers = layerStore.layers.ids.map(id => layerStore.layers.entities[id]).filter(layer => layer !== void 0 && layer.sceneId === this.sceneId && layer.type === LayerType$1.Object && this.isLayerEffectivelyVisible(layer.id));
+      const layers = layerStore.layers.ids.map(id => layerStore.layers.entities[id]).filter(layer => layer !== void 0 && layer.sceneId === this.sceneId && layer.type === LayerType$1.Object && this.isLayerEffectivelyVisible(layer.id) && !isLayerLocked(layerStore.layers.entities, layer.id));
       const selectedIds = [];
       for (const layer of layers) {
         if (this.objectIntersectsRect(layer, rect)) {
@@ -67243,7 +67286,7 @@
     const {layersTree: layersTree} = useActiveSceneLayers();
     const renderNode = node => {
       const layer = layers[node.id];
-      if (!layer || layer.hidden) return null;
+      if (!layer || layer.hidden || isLayerLocked(layers, layer.id)) return null;
       if (layer.type === LayerType$1.Group) {
         return jsxRuntimeExports.jsx("g", {
           "data-layer-id": layer.id,
@@ -67880,11 +67923,12 @@
       }
       return false;
     }, [ selectedLayer.parentId, entities ]);
+    const isLocked = reactExports.useMemo(() => isLayerLocked(entities, selectedLayer.id), [ entities, selectedLayer.id ]);
     const object = selectedLayer.type === LayerType$1.Object ? selectedLayer.object : null;
     const isHidden = selectedLayer.hidden || isParentHidden;
-    const isMovable = !isHidden && object && canMove(object.type);
-    const isRotatable = !isHidden && object && canRotate(object.type);
-    const isResizable = !isHidden && object && canResize(object.type);
+    const isMovable = !isHidden && !isLocked && object && canMove(object.type);
+    const isRotatable = !isHidden && !isLocked && object && canRotate(object.type);
+    const isResizable = !isHidden && !isLocked && object && canResize(object.type);
     const lockAspectRatio = object?.type === ObjectType$1.Image;
     const initialTransformRect = reactExports.useMemo(() => {
       const fallbackRect = {
@@ -68230,7 +68274,7 @@
     const selectedBounds = reactExports.useMemo(() => selectedLayerIds.map(id => {
       const layer = layers[id];
       const layerBounds = bounds[id];
-      if (!layerBounds || !layer || layer.type !== LayerType$1.Object) {
+      if (!layerBounds || !layer || layer.type !== LayerType$1.Object || isLayerLocked(layers, id)) {
         return null;
       }
       let rotatedBounds;
@@ -68296,7 +68340,7 @@
       const items = [];
       selectedLayerIds.forEach(layerId => {
         const layer = layers[layerId];
-        if (layer && layer.type === LayerType$1.Object) {
+        if (layer && layer.type === LayerType$1.Object && !isLayerLocked(layers, layerId)) {
           items.push({
             id: layerId,
             updates: {
@@ -82254,7 +82298,7 @@
     }
     applyShapeStyles(shapeEl, obj, layer) {
       shapeEl.classList.add("pp-layer");
-      if (layer.static) shapeEl.classList.add("pp-static");
+      if (layer.nonInteractive) shapeEl.classList.add("pp-noninteractive");
       const style = {};
       style["fill"] = obj.style?.fill ?? "transparent";
       style["stroke"] = obj.style?.stroke ?? "transparent";
@@ -83484,7 +83528,7 @@
     }
     applyMarkerStyles(markerEl, obj, layer) {
       markerEl.classList.add("pp-layer", "pp-marker");
-      if (layer.static) markerEl.classList.add("pp-static");
+      if (layer.nonInteractive) markerEl.classList.add("pp-noninteractive");
       const isImageVariant = (obj.variant ?? MarkerVariantType.IconLabel) === MarkerVariantType.Image;
       const style = {};
       style["color"] = obj.style?.color;
@@ -99775,7 +99819,7 @@
       }));
     }
   }
-  const shadowStyles = '@charset "UTF-8";\n[data-overlayscrollbars-viewport] {\n  scrollbar-width: thin;\n}\n\n.os-theme-dark, .os-theme-light {\n  --os-size: 5px;\n  --os-padding-axis: 0;\n  --os-padding-perpendicular: 0;\n}\n\n.pp-viewport {\n  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\n  font-weight: 400;\n  line-height: 1.4;\n}\n\n.pp-viewport,\n.pp-greeting,\n.pp-scenes,\n.pp-scene,\n.pp-board,\n.pp-origin,\n.pp-canvas,\n.pp-layers,\n.pp-shapes,\n.pp-markers,\n.pp-tooltips,\n.pp-popups,\n.pp-controls {\n  position: absolute;\n  inset: 0;\n}\n\n.pp-tooltips,\n.pp-popups {\n  z-index: 10;\n}\n\n.pp-controls {\n  z-index: 20;\n}\n\n.pp-greeting {\n  z-index: 30;\n}\n\n.pp-scene,\n.pp-board,\n.pp-origin,\n.pp-canvas,\n.pp-layers,\n.pp-shapes,\n.pp-markers,\n.pp-layer,\n.pp-tooltips,\n.pp-popups,\n.pp-controls {\n  pointer-events: none;\n}\n\n.pp-viewport {\n  background-position: center;\n  background-repeat: no-repeat;\n  background-size: cover;\n}\n\n.pp-viewport,\n.pp-greeting,\n.pp-scenes,\n.pp-controls {\n  transition: opacity 0.3s ease, visibility 0s linear 0.3s;\n  opacity: 0;\n  visibility: hidden;\n}\n.pp-viewport.pp-show,\n.pp-greeting.pp-show,\n.pp-scenes.pp-show,\n.pp-controls.pp-show {\n  transition: opacity 0.3s ease, visibility 0s linear 0s;\n  opacity: 1;\n  visibility: visible;\n}\n\n.pp-scene {\n  transition: opacity 0.3s ease;\n  opacity: 0;\n}\n.pp-scene.pp-show {\n  opacity: 1;\n}\n.pp-scene.pp-show .pp-layer:not(.pp-static) {\n  pointer-events: auto;\n}\n\n.pp-greeting {\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  overflow: hidden;\n}\n\n.pp-greeting-button {\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n  padding: 20px;\n  font-size: 16px;\n  white-space: pre-wrap;\n  text-align: center;\n  user-select: none;\n  cursor: pointer;\n  pointer-events: auto;\n}\n.pp-greeting-button:hover {\n  transform: scale(1.05);\n}\n\n.pp-scenes {\n  touch-action: none;\n  cursor: default;\n}\n.pp-scenes.pp-grab {\n  cursor: grab;\n}\n\n.pp-scene {\n  background-position: center center;\n  background-repeat: repeat;\n}\n\n.pp-board {\n  overflow: hidden;\n}\n\n.pp-origin {\n  will-change: transform;\n}\n\n.pp-canvas {\n  background-size: 100% 100%;\n  background-repeat: no-repeat;\n}\n\n.pp-layers.pp-clip {\n  overflow: hidden;\n}\n\n.pp-layer {\n  transition: all 0.3s ease;\n}\n\n.pp-shapes text {\n  user-select: none;\n}\n\n.pp-markers .pp-p {\n  position: absolute;\n  contain: layout style;\n  will-change: transform;\n  transform: translate(calc(var(--pp-x) * var(--pp-scale) * 1px), calc(var(--pp-y) * var(--pp-scale) * 1px)) var(--pp-anchor);\n}\n\n:host(.pp-fullscreen) {\n  position: fixed !important;\n  inset: 0 !important;\n  width: 100vw !important;\n  height: 100vh !important;\n  width: 100dvw !important;\n  height: 100dvh !important;\n  max-width: none !important;\n  max-height: none !important;\n  margin: 0 !important;\n  border-radius: 0 !important;\n  z-index: 2147483647;\n}\n\n.pp-arrow {\n  position: absolute;\n  fill: var(--pp-base-bg-color);\n}\n.pp-arrow.pp-hide {\n  display: none;\n}\n.pp-arrow.pp-t {\n  top: 0;\n  left: 50%;\n  translate: -50% calc(-100% + 1px);\n  rotate: 0deg;\n}\n.pp-arrow.pp-b {\n  left: 50%;\n  bottom: 0;\n  translate: -50% calc(100% - 1px);\n  rotate: 180deg;\n}\n.pp-arrow.pp-l {\n  top: 50%;\n  left: 0;\n  translate: calc(-100% + 1px) 0%;\n  rotate: -90deg;\n  transform-origin: top center;\n}\n.pp-arrow.pp-r {\n  top: 50%;\n  right: 0;\n  translate: 50% calc(-100% + 1px);\n  rotate: 90deg;\n  transform-origin: bottom center;\n}\n\n.pp-close {\n  transition: opacity 0.3s ease;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  position: absolute;\n  top: 10px;\n  right: 10px;\n  width: 24px;\n  height: 24px;\n  border-radius: 6px;\n  cursor: pointer;\n}\n.pp-close svg {\n  width: 12px;\n  height: 12px;\n  stroke: var(--pp-base-color);\n}\n.pp-close:hover {\n  background: color-mix(in srgb, var(--pp-base-color) 20%, transparent);\n}\n.pp-close.pp-hide {\n  display: none;\n}\n\n.pp-tooltips .pp-p,\n.pp-popups .pp-p {\n  position: absolute;\n}\n\n.pp-popups.pp-modal {\n  z-index: 25;\n}\n\n.pp-tooltip {\n  position: relative;\n  width: max-content;\n  padding: 10px;\n  font-size: var(--pp-base-font-size);\n  color: var(--pp-base-color);\n  background-color: var(--pp-base-bg-color);\n  border-radius: 4px;\n  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));\n  pointer-events: auto;\n}\n\n.pp-popup {\n  position: relative;\n  width: min(320px, 90vw);\n  padding: 10px;\n  font-size: var(--pp-base-font-size);\n  color: var(--pp-base-color);\n  background-color: var(--pp-base-bg-color);\n  border-radius: 4px;\n  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));\n  pointer-events: auto;\n}\n\n.pp-tooltip .pp-text {\n  margin: -5px 0;\n  white-space: pre-line;\n}\n\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  max-height: min(45vh, 500px);\n  /* color и background-color заданы в .pp-popup и .pp-tooltip */\n  /* Типографика */\n  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\n  font-size: var(--pp-base-font-size);\n  font-weight: 400;\n  line-height: 1.4;\n  white-space: pre-wrap;\n  /* Заголовки */\n}\n.pp-tooltip .pp-content h1, .pp-tooltip .pp-content h2, .pp-tooltip .pp-content h3, .pp-tooltip .pp-content h4, .pp-tooltip .pp-content h5, .pp-tooltip .pp-content h6,\n.pp-popup .pp-content h1,\n.pp-popup .pp-content h2,\n.pp-popup .pp-content h3,\n.pp-popup .pp-content h4,\n.pp-popup .pp-content h5,\n.pp-popup .pp-content h6 {\n  margin: 0.4em 0;\n  line-height: 1.25;\n  font-weight: 600;\n  text-wrap: balance; /* Предотвращает висящие слова в заголовках */\n}\n.pp-tooltip .pp-content h1,\n.pp-popup .pp-content h1 {\n  font-size: 1.75em;\n  font-weight: 700;\n}\n.pp-tooltip .pp-content h2,\n.pp-popup .pp-content h2 {\n  font-size: 1.5em;\n}\n.pp-tooltip .pp-content h3,\n.pp-popup .pp-content h3 {\n  font-size: 1.25em;\n}\n.pp-tooltip .pp-content h4,\n.pp-popup .pp-content h4 {\n  font-size: 1em;\n}\n.pp-tooltip .pp-content h5,\n.pp-popup .pp-content h5 {\n  font-size: 0.875em;\n  text-transform: uppercase;\n  letter-spacing: 0.05em;\n}\n.pp-tooltip .pp-content h6,\n.pp-popup .pp-content h6 {\n  font-size: 0.75em;\n}\n.pp-tooltip .pp-content h1:has(span[style*=font-size]),\n.pp-tooltip .pp-content h2:has(span[style*=font-size]),\n.pp-tooltip .pp-content h3:has(span[style*=font-size]),\n.pp-tooltip .pp-content h4:has(span[style*=font-size]),\n.pp-tooltip .pp-content h5:has(span[style*=font-size]),\n.pp-tooltip .pp-content h6:has(span[style*=font-size]),\n.pp-popup .pp-content h1:has(span[style*=font-size]),\n.pp-popup .pp-content h2:has(span[style*=font-size]),\n.pp-popup .pp-content h3:has(span[style*=font-size]),\n.pp-popup .pp-content h4:has(span[style*=font-size]),\n.pp-popup .pp-content h5:has(span[style*=font-size]),\n.pp-popup .pp-content h6:has(span[style*=font-size]) {\n  font-size: inherit;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Текст */\n}\n.pp-tooltip .pp-content p,\n.pp-popup .pp-content p {\n  margin-top: 0;\n  margin-bottom: 0.4em;\n  font-size: inherit;\n  text-wrap: pretty;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Инлайновый код */\n}\n.pp-tooltip .pp-content code,\n.pp-popup .pp-content code {\n  padding: 0.2em 0.4em; /* Относительные отступы лучше фиксированных px */\n  color: var(--pp-code-color);\n  background: var(--pp-code-bg-color);\n  font-family: monospace;\n  border-radius: 3px;\n  font-size: 0.9em; /* Код обычно визуально крупнее основного шрифта */\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Цитаты */\n}\n.pp-tooltip .pp-content blockquote,\n.pp-popup .pp-content blockquote {\n  display: flow-root;\n  position: relative;\n  padding-block: 0.375em;\n  padding-inline: 1em 0;\n  margin: 0.4em 0;\n}\n.pp-tooltip .pp-content blockquote:before,\n.pp-popup .pp-content blockquote:before {\n  content: "";\n  position: absolute;\n  inset-block: 0;\n  inset-inline-start: 0;\n  width: 0.25em;\n  background-color: var(--pp-base-color);\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Списки */\n}\n.pp-tooltip .pp-content ul, .pp-tooltip .pp-content ol,\n.pp-popup .pp-content ul,\n.pp-popup .pp-content ol {\n  margin-top: 0;\n  margin-bottom: 0.4em;\n  padding-left: 1.5em;\n  list-style-position: outside;\n}\n.pp-tooltip .pp-content ul ul, .pp-tooltip .pp-content ul ol, .pp-tooltip .pp-content ol ul, .pp-tooltip .pp-content ol ol,\n.pp-popup .pp-content ul ul,\n.pp-popup .pp-content ul ol,\n.pp-popup .pp-content ol ul,\n.pp-popup .pp-content ol ol {\n  margin-bottom: 0;\n  padding-left: 1.2em;\n}\n.pp-tooltip .pp-content ul li, .pp-tooltip .pp-content ol li,\n.pp-popup .pp-content ul li,\n.pp-popup .pp-content ol li {\n  font-size: inherit;\n  margin-bottom: 0.25em;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Ссылки */\n}\n.pp-tooltip .pp-content a,\n.pp-popup .pp-content a {\n  color: var(--pp-link-color);\n  text-decoration: none;\n  font-weight: 600;\n  transition: color 0.15s ease-in-out;\n}\n.pp-tooltip .pp-content a:hover,\n.pp-popup .pp-content a:hover {\n  text-decoration: underline;\n}\n.pp-tooltip .pp-content a,\n.pp-popup .pp-content a {\n  /* Фокус только при навигации с клавиатуры */\n}\n.pp-tooltip .pp-content a:focus-visible,\n.pp-popup .pp-content a:focus-visible {\n  outline: 2px solid var(--pp-link-color);\n  outline-offset: 2px;\n}\n.pp-tooltip .pp-content a:not([href]),\n.pp-popup .pp-content a:not([href]) {\n  color: inherit;\n  font-weight: normal;\n  cursor: default;\n}\n.pp-tooltip .pp-content a:empty,\n.pp-popup .pp-content a:empty {\n  display: none;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Медиа */\n}\n.pp-tooltip .pp-content img,\n.pp-popup .pp-content img {\n  display: block; /* Убирает нижний микро-отступ инлайновых элементов */\n  margin: 0.4em 0;\n  height: auto;\n  width: 100%;\n  max-width: 100%;\n  border-radius: 6px;\n}\n.pp-tooltip .pp-content iframe,\n.pp-popup .pp-content iframe {\n  display: block;\n  margin: 0.4em 0;\n  border: none;\n}\n.pp-tooltip .pp-content button,\n.pp-popup .pp-content button {\n  display: inline-block;\n  margin: 0.4em 0;\n  padding: 10px 20px;\n  color: var(--pp-btn-color);\n  background: var(--pp-btn-bg-color);\n  border: none;\n  border-radius: 6px;\n  text-align: center;\n  line-height: 1.2;\n  cursor: pointer;\n}\n.pp-tooltip .pp-content button:hover,\n.pp-popup .pp-content button:hover {\n  background: var(--pp-btn-bg-hover-color);\n}\n.pp-tooltip .pp-content img, .pp-tooltip .pp-content iframe, .pp-tooltip .pp-content button,\n.pp-popup .pp-content img,\n.pp-popup .pp-content iframe,\n.pp-popup .pp-content button {\n  max-width: 100%;\n}\n.pp-tooltip .pp-content img.alignleft, .pp-tooltip .pp-content iframe.alignleft, .pp-tooltip .pp-content button.alignleft,\n.pp-popup .pp-content img.alignleft,\n.pp-popup .pp-content iframe.alignleft,\n.pp-popup .pp-content button.alignleft {\n  float: left;\n  margin: 0 0.4em 0.4em 0;\n}\n.pp-tooltip .pp-content img.alignright, .pp-tooltip .pp-content iframe.alignright, .pp-tooltip .pp-content button.alignright,\n.pp-popup .pp-content img.alignright,\n.pp-popup .pp-content iframe.alignright,\n.pp-popup .pp-content button.alignright {\n  float: right;\n  margin: 0 0 0.4em 0.4em;\n}\n.pp-tooltip .pp-content img.aligncenter, .pp-tooltip .pp-content iframe.aligncenter, .pp-tooltip .pp-content button.aligncenter,\n.pp-popup .pp-content img.aligncenter,\n.pp-popup .pp-content iframe.aligncenter,\n.pp-popup .pp-content button.aligncenter {\n  margin-left: auto;\n  margin-right: auto;\n  float: none;\n}\n.pp-tooltip .pp-content img.aligncenter, .pp-tooltip .pp-content button.aligncenter,\n.pp-popup .pp-content img.aligncenter,\n.pp-popup .pp-content button.aligncenter {\n  display: table;\n}\n.pp-tooltip .pp-content iframe.aligncenter,\n.pp-popup .pp-content iframe.aligncenter {\n  display: block;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Запасной вариант для старых браузеров вместо :is(...) */\n}\n.pp-tooltip .pp-content > div > :first-child,\n.pp-popup .pp-content > div > :first-child {\n  margin-top: 0;\n}\n.pp-tooltip .pp-content > div > :last-child,\n.pp-popup .pp-content > div > :last-child {\n  margin-bottom: 0;\n}\n\n.pp-tooltip,\n.pp-popup {\n  transition: opacity 0.2s ease, transform 0.2s ease;\n  opacity: 0;\n  transform: scale(0.5);\n  will-change: opacity, transform;\n}\n.pp-tooltip.pp-hide,\n.pp-popup.pp-hide {\n  opacity: 0;\n  transform: scale(0.5);\n}\n.pp-tooltip.pp-show,\n.pp-popup.pp-show {\n  opacity: 1;\n  transform: scale(1);\n}\n\n.pp-p-overlay {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0, 0, 0, 0.5);\n  pointer-events: auto;\n  padding: 10px;\n  opacity: 0;\n  visibility: hidden;\n  transition: opacity 0.2s ease, visibility 0s linear 0.2s;\n}\n.pp-p-overlay.pp-show {\n  opacity: 1;\n  visibility: visible;\n  transition: opacity 0.2s ease, visibility 0s linear 0s;\n}\n.pp-p-overlay .pp-popup {\n  display: flex;\n  flex-direction: column;\n  max-height: 80%;\n  min-height: 0;\n  overflow: hidden;\n}\n.pp-p-overlay .pp-content {\n  max-height: none;\n  min-height: 0;\n  flex: 0 1 auto;\n}\n\n.pp-controls {\n  display: flex;\n  align-items: flex-start;\n  overflow: hidden;\n  font-size: 14px;\n  line-height: 18px;\n}\n.pp-controls .pp-controls-body {\n  position: absolute;\n  inset: 0;\n}\n.pp-controls .pp-slot {\n  position: absolute;\n  display: flex;\n  flex-direction: row;\n  gap: 5px;\n}\n.pp-controls .pp-slot[data-type=tl] {\n  top: 12px;\n  left: 12px;\n  align-items: flex-start;\n}\n.pp-controls .pp-slot[data-type=t] {\n  top: 12px;\n  left: 50%;\n  transform: translateX(-50%);\n  align-items: flex-start;\n}\n.pp-controls .pp-slot[data-type=tr] {\n  top: 12px;\n  right: 12px;\n  align-items: flex-start;\n}\n.pp-controls .pp-slot[data-type=l] {\n  flex-direction: column;\n  top: 50%;\n  left: 12px;\n  transform: translateY(-50%);\n}\n.pp-controls .pp-slot[data-type=r] {\n  flex-direction: column;\n  top: 50%;\n  right: 12px;\n  transform: translateY(-50%);\n}\n.pp-controls .pp-slot[data-type=bl] {\n  bottom: 12px;\n  left: 12px;\n  align-items: flex-end;\n}\n.pp-controls .pp-slot[data-type=b] {\n  bottom: 12px;\n  left: 50%;\n  transform: translateX(-50%);\n  align-items: flex-end;\n}\n.pp-controls .pp-slot[data-type=br] {\n  bottom: 12px;\n  right: 12px;\n  align-items: flex-end;\n}\n\ntext {\n  font-size: 16px;\n}\n\n.pp-marker {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: transparent;\n  font-size: 16px;\n  box-sizing: border-box;\n}\n.pp-marker img, .pp-marker svg {\n  display: block;\n  transition: opacity 0.3s ease;\n  opacity: 0;\n  visibility: hidden;\n  user-select: none;\n  flex-shrink: 0;\n}\n.pp-marker img.pp-loaded, .pp-marker svg.pp-loaded {\n  opacity: 1;\n  visibility: visible;\n}\n.pp-marker[data-type=label], .pp-marker[data-type=label-icon], .pp-marker[data-type=icon-label] {\n  flex-direction: row;\n  gap: 0.2em;\n  padding: 0.4em;\n  line-height: 1.2;\n  white-space: nowrap;\n  user-select: none;\n  box-sizing: border-box;\n}\n.pp-marker[data-type=label] svg, .pp-marker[data-type=label-icon] svg, .pp-marker[data-type=icon-label] svg {\n  width: 1.25em;\n  height: 1.25em;\n}\n.pp-marker[data-type=icon] {\n  padding: 0.2em;\n}\n.pp-marker[data-type=icon] svg {\n  width: 1em;\n  height: 1em;\n}';
+  const shadowStyles = '@charset "UTF-8";\n[data-overlayscrollbars-viewport] {\n  scrollbar-width: thin;\n}\n\n.os-theme-dark, .os-theme-light {\n  --os-size: 5px;\n  --os-padding-axis: 0;\n  --os-padding-perpendicular: 0;\n}\n\n.pp-viewport {\n  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\n  font-weight: 400;\n  line-height: 1.4;\n}\n\n.pp-viewport,\n.pp-greeting,\n.pp-scenes,\n.pp-scene,\n.pp-board,\n.pp-origin,\n.pp-canvas,\n.pp-layers,\n.pp-shapes,\n.pp-markers,\n.pp-tooltips,\n.pp-popups,\n.pp-controls {\n  position: absolute;\n  inset: 0;\n}\n\n.pp-tooltips,\n.pp-popups {\n  z-index: 10;\n}\n\n.pp-controls {\n  z-index: 20;\n}\n\n.pp-greeting {\n  z-index: 30;\n}\n\n.pp-scene,\n.pp-board,\n.pp-origin,\n.pp-canvas,\n.pp-layers,\n.pp-shapes,\n.pp-markers,\n.pp-layer,\n.pp-tooltips,\n.pp-popups,\n.pp-controls {\n  pointer-events: none;\n}\n\n.pp-viewport {\n  background-position: center;\n  background-repeat: no-repeat;\n  background-size: cover;\n}\n\n.pp-viewport,\n.pp-greeting,\n.pp-scenes,\n.pp-controls {\n  transition: opacity 0.3s ease, visibility 0s linear 0.3s;\n  opacity: 0;\n  visibility: hidden;\n}\n.pp-viewport.pp-show,\n.pp-greeting.pp-show,\n.pp-scenes.pp-show,\n.pp-controls.pp-show {\n  transition: opacity 0.3s ease, visibility 0s linear 0s;\n  opacity: 1;\n  visibility: visible;\n}\n\n.pp-scene {\n  transition: opacity 0.3s ease;\n  opacity: 0;\n}\n.pp-scene.pp-show {\n  opacity: 1;\n}\n.pp-scene.pp-show .pp-layer:not(.pp-noninteractive) {\n  pointer-events: auto;\n}\n\n.pp-greeting {\n  display: flex;\n  justify-content: center;\n  align-items: center;\n  overflow: hidden;\n}\n\n.pp-greeting-button {\n  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);\n  padding: 20px;\n  font-size: 16px;\n  white-space: pre-wrap;\n  text-align: center;\n  user-select: none;\n  cursor: pointer;\n  pointer-events: auto;\n}\n.pp-greeting-button:hover {\n  transform: scale(1.05);\n}\n\n.pp-scenes {\n  touch-action: none;\n  cursor: default;\n}\n.pp-scenes.pp-grab {\n  cursor: grab;\n}\n\n.pp-scene {\n  background-position: center center;\n  background-repeat: repeat;\n}\n\n.pp-board {\n  overflow: hidden;\n}\n\n.pp-origin {\n  will-change: transform;\n}\n\n.pp-canvas {\n  background-size: 100% 100%;\n  background-repeat: no-repeat;\n}\n\n.pp-layers.pp-clip {\n  overflow: hidden;\n}\n\n.pp-layer {\n  transition: all 0.3s ease;\n}\n\n.pp-shapes text {\n  user-select: none;\n}\n\n.pp-markers .pp-p {\n  position: absolute;\n  contain: layout style;\n  will-change: transform;\n  transform: translate(calc(var(--pp-x) * var(--pp-scale) * 1px), calc(var(--pp-y) * var(--pp-scale) * 1px)) var(--pp-anchor);\n}\n\n:host(.pp-fullscreen) {\n  position: fixed !important;\n  inset: 0 !important;\n  width: 100vw !important;\n  height: 100vh !important;\n  width: 100dvw !important;\n  height: 100dvh !important;\n  max-width: none !important;\n  max-height: none !important;\n  margin: 0 !important;\n  border-radius: 0 !important;\n  z-index: 2147483647;\n}\n\n.pp-arrow {\n  position: absolute;\n  fill: var(--pp-base-bg-color);\n}\n.pp-arrow.pp-hide {\n  display: none;\n}\n.pp-arrow.pp-t {\n  top: 0;\n  left: 50%;\n  translate: -50% calc(-100% + 1px);\n  rotate: 0deg;\n}\n.pp-arrow.pp-b {\n  left: 50%;\n  bottom: 0;\n  translate: -50% calc(100% - 1px);\n  rotate: 180deg;\n}\n.pp-arrow.pp-l {\n  top: 50%;\n  left: 0;\n  translate: calc(-100% + 1px) 0%;\n  rotate: -90deg;\n  transform-origin: top center;\n}\n.pp-arrow.pp-r {\n  top: 50%;\n  right: 0;\n  translate: 50% calc(-100% + 1px);\n  rotate: 90deg;\n  transform-origin: bottom center;\n}\n\n.pp-close {\n  transition: opacity 0.3s ease;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  position: absolute;\n  top: 10px;\n  right: 10px;\n  width: 24px;\n  height: 24px;\n  border-radius: 6px;\n  cursor: pointer;\n}\n.pp-close svg {\n  width: 12px;\n  height: 12px;\n  stroke: var(--pp-base-color);\n}\n.pp-close:hover {\n  background: color-mix(in srgb, var(--pp-base-color) 20%, transparent);\n}\n.pp-close.pp-hide {\n  display: none;\n}\n\n.pp-tooltips .pp-p,\n.pp-popups .pp-p {\n  position: absolute;\n}\n\n.pp-popups.pp-modal {\n  z-index: 25;\n}\n\n.pp-tooltip {\n  position: relative;\n  width: max-content;\n  padding: 10px;\n  font-size: var(--pp-base-font-size);\n  color: var(--pp-base-color);\n  background-color: var(--pp-base-bg-color);\n  border-radius: 4px;\n  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));\n  pointer-events: auto;\n}\n\n.pp-popup {\n  position: relative;\n  width: min(320px, 90vw);\n  padding: 10px;\n  font-size: var(--pp-base-font-size);\n  color: var(--pp-base-color);\n  background-color: var(--pp-base-bg-color);\n  border-radius: 4px;\n  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.1)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.05));\n  pointer-events: auto;\n}\n\n.pp-tooltip .pp-text {\n  margin: -5px 0;\n  white-space: pre-line;\n}\n\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  max-height: min(45vh, 500px);\n  /* color и background-color заданы в .pp-popup и .pp-tooltip */\n  /* Типографика */\n  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;\n  font-size: var(--pp-base-font-size);\n  font-weight: 400;\n  line-height: 1.4;\n  white-space: pre-wrap;\n  /* Заголовки */\n}\n.pp-tooltip .pp-content h1, .pp-tooltip .pp-content h2, .pp-tooltip .pp-content h3, .pp-tooltip .pp-content h4, .pp-tooltip .pp-content h5, .pp-tooltip .pp-content h6,\n.pp-popup .pp-content h1,\n.pp-popup .pp-content h2,\n.pp-popup .pp-content h3,\n.pp-popup .pp-content h4,\n.pp-popup .pp-content h5,\n.pp-popup .pp-content h6 {\n  margin: 0.4em 0;\n  line-height: 1.25;\n  font-weight: 600;\n  text-wrap: balance; /* Предотвращает висящие слова в заголовках */\n}\n.pp-tooltip .pp-content h1,\n.pp-popup .pp-content h1 {\n  font-size: 1.75em;\n  font-weight: 700;\n}\n.pp-tooltip .pp-content h2,\n.pp-popup .pp-content h2 {\n  font-size: 1.5em;\n}\n.pp-tooltip .pp-content h3,\n.pp-popup .pp-content h3 {\n  font-size: 1.25em;\n}\n.pp-tooltip .pp-content h4,\n.pp-popup .pp-content h4 {\n  font-size: 1em;\n}\n.pp-tooltip .pp-content h5,\n.pp-popup .pp-content h5 {\n  font-size: 0.875em;\n  text-transform: uppercase;\n  letter-spacing: 0.05em;\n}\n.pp-tooltip .pp-content h6,\n.pp-popup .pp-content h6 {\n  font-size: 0.75em;\n}\n.pp-tooltip .pp-content h1:has(span[style*=font-size]),\n.pp-tooltip .pp-content h2:has(span[style*=font-size]),\n.pp-tooltip .pp-content h3:has(span[style*=font-size]),\n.pp-tooltip .pp-content h4:has(span[style*=font-size]),\n.pp-tooltip .pp-content h5:has(span[style*=font-size]),\n.pp-tooltip .pp-content h6:has(span[style*=font-size]),\n.pp-popup .pp-content h1:has(span[style*=font-size]),\n.pp-popup .pp-content h2:has(span[style*=font-size]),\n.pp-popup .pp-content h3:has(span[style*=font-size]),\n.pp-popup .pp-content h4:has(span[style*=font-size]),\n.pp-popup .pp-content h5:has(span[style*=font-size]),\n.pp-popup .pp-content h6:has(span[style*=font-size]) {\n  font-size: inherit;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Текст */\n}\n.pp-tooltip .pp-content p,\n.pp-popup .pp-content p {\n  margin-top: 0;\n  margin-bottom: 0.4em;\n  font-size: inherit;\n  text-wrap: pretty;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Инлайновый код */\n}\n.pp-tooltip .pp-content code,\n.pp-popup .pp-content code {\n  padding: 0.2em 0.4em; /* Относительные отступы лучше фиксированных px */\n  color: var(--pp-code-color);\n  background: var(--pp-code-bg-color);\n  font-family: monospace;\n  border-radius: 3px;\n  font-size: 0.9em; /* Код обычно визуально крупнее основного шрифта */\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Цитаты */\n}\n.pp-tooltip .pp-content blockquote,\n.pp-popup .pp-content blockquote {\n  display: flow-root;\n  position: relative;\n  padding-block: 0.375em;\n  padding-inline: 1em 0;\n  margin: 0.4em 0;\n}\n.pp-tooltip .pp-content blockquote:before,\n.pp-popup .pp-content blockquote:before {\n  content: "";\n  position: absolute;\n  inset-block: 0;\n  inset-inline-start: 0;\n  width: 0.25em;\n  background-color: var(--pp-base-color);\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Списки */\n}\n.pp-tooltip .pp-content ul, .pp-tooltip .pp-content ol,\n.pp-popup .pp-content ul,\n.pp-popup .pp-content ol {\n  margin-top: 0;\n  margin-bottom: 0.4em;\n  padding-left: 1.5em;\n  list-style-position: outside;\n}\n.pp-tooltip .pp-content ul ul, .pp-tooltip .pp-content ul ol, .pp-tooltip .pp-content ol ul, .pp-tooltip .pp-content ol ol,\n.pp-popup .pp-content ul ul,\n.pp-popup .pp-content ul ol,\n.pp-popup .pp-content ol ul,\n.pp-popup .pp-content ol ol {\n  margin-bottom: 0;\n  padding-left: 1.2em;\n}\n.pp-tooltip .pp-content ul li, .pp-tooltip .pp-content ol li,\n.pp-popup .pp-content ul li,\n.pp-popup .pp-content ol li {\n  font-size: inherit;\n  margin-bottom: 0.25em;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Ссылки */\n}\n.pp-tooltip .pp-content a,\n.pp-popup .pp-content a {\n  color: var(--pp-link-color);\n  text-decoration: none;\n  font-weight: 600;\n  transition: color 0.15s ease-in-out;\n}\n.pp-tooltip .pp-content a:hover,\n.pp-popup .pp-content a:hover {\n  text-decoration: underline;\n}\n.pp-tooltip .pp-content a,\n.pp-popup .pp-content a {\n  /* Фокус только при навигации с клавиатуры */\n}\n.pp-tooltip .pp-content a:focus-visible,\n.pp-popup .pp-content a:focus-visible {\n  outline: 2px solid var(--pp-link-color);\n  outline-offset: 2px;\n}\n.pp-tooltip .pp-content a:not([href]),\n.pp-popup .pp-content a:not([href]) {\n  color: inherit;\n  font-weight: normal;\n  cursor: default;\n}\n.pp-tooltip .pp-content a:empty,\n.pp-popup .pp-content a:empty {\n  display: none;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Медиа */\n}\n.pp-tooltip .pp-content img,\n.pp-popup .pp-content img {\n  display: block; /* Убирает нижний микро-отступ инлайновых элементов */\n  margin: 0.4em 0;\n  height: auto;\n  width: 100%;\n  max-width: 100%;\n  border-radius: 6px;\n}\n.pp-tooltip .pp-content iframe,\n.pp-popup .pp-content iframe {\n  display: block;\n  margin: 0.4em 0;\n  border: none;\n}\n.pp-tooltip .pp-content button,\n.pp-popup .pp-content button {\n  display: inline-block;\n  margin: 0.4em 0;\n  padding: 10px 20px;\n  color: var(--pp-btn-color);\n  background: var(--pp-btn-bg-color);\n  border: none;\n  border-radius: 6px;\n  text-align: center;\n  line-height: 1.2;\n  cursor: pointer;\n}\n.pp-tooltip .pp-content button:hover,\n.pp-popup .pp-content button:hover {\n  background: var(--pp-btn-bg-hover-color);\n}\n.pp-tooltip .pp-content img, .pp-tooltip .pp-content iframe, .pp-tooltip .pp-content button,\n.pp-popup .pp-content img,\n.pp-popup .pp-content iframe,\n.pp-popup .pp-content button {\n  max-width: 100%;\n}\n.pp-tooltip .pp-content img.alignleft, .pp-tooltip .pp-content iframe.alignleft, .pp-tooltip .pp-content button.alignleft,\n.pp-popup .pp-content img.alignleft,\n.pp-popup .pp-content iframe.alignleft,\n.pp-popup .pp-content button.alignleft {\n  float: left;\n  margin: 0 0.4em 0.4em 0;\n}\n.pp-tooltip .pp-content img.alignright, .pp-tooltip .pp-content iframe.alignright, .pp-tooltip .pp-content button.alignright,\n.pp-popup .pp-content img.alignright,\n.pp-popup .pp-content iframe.alignright,\n.pp-popup .pp-content button.alignright {\n  float: right;\n  margin: 0 0 0.4em 0.4em;\n}\n.pp-tooltip .pp-content img.aligncenter, .pp-tooltip .pp-content iframe.aligncenter, .pp-tooltip .pp-content button.aligncenter,\n.pp-popup .pp-content img.aligncenter,\n.pp-popup .pp-content iframe.aligncenter,\n.pp-popup .pp-content button.aligncenter {\n  margin-left: auto;\n  margin-right: auto;\n  float: none;\n}\n.pp-tooltip .pp-content img.aligncenter, .pp-tooltip .pp-content button.aligncenter,\n.pp-popup .pp-content img.aligncenter,\n.pp-popup .pp-content button.aligncenter {\n  display: table;\n}\n.pp-tooltip .pp-content iframe.aligncenter,\n.pp-popup .pp-content iframe.aligncenter {\n  display: block;\n}\n.pp-tooltip .pp-content,\n.pp-popup .pp-content {\n  /* Запасной вариант для старых браузеров вместо :is(...) */\n}\n.pp-tooltip .pp-content > div > :first-child,\n.pp-popup .pp-content > div > :first-child {\n  margin-top: 0;\n}\n.pp-tooltip .pp-content > div > :last-child,\n.pp-popup .pp-content > div > :last-child {\n  margin-bottom: 0;\n}\n\n.pp-tooltip,\n.pp-popup {\n  transition: opacity 0.2s ease, transform 0.2s ease;\n  opacity: 0;\n  transform: scale(0.5);\n  will-change: opacity, transform;\n}\n.pp-tooltip.pp-hide,\n.pp-popup.pp-hide {\n  opacity: 0;\n  transform: scale(0.5);\n}\n.pp-tooltip.pp-show,\n.pp-popup.pp-show {\n  opacity: 1;\n  transform: scale(1);\n}\n\n.pp-p-overlay {\n  position: absolute;\n  inset: 0;\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  background: rgba(0, 0, 0, 0.5);\n  pointer-events: auto;\n  padding: 10px;\n  opacity: 0;\n  visibility: hidden;\n  transition: opacity 0.2s ease, visibility 0s linear 0.2s;\n}\n.pp-p-overlay.pp-show {\n  opacity: 1;\n  visibility: visible;\n  transition: opacity 0.2s ease, visibility 0s linear 0s;\n}\n.pp-p-overlay .pp-popup {\n  display: flex;\n  flex-direction: column;\n  max-height: 80%;\n  min-height: 0;\n  overflow: hidden;\n}\n.pp-p-overlay .pp-content {\n  max-height: none;\n  min-height: 0;\n  flex: 0 1 auto;\n}\n\n.pp-controls {\n  display: flex;\n  align-items: flex-start;\n  overflow: hidden;\n  font-size: 14px;\n  line-height: 18px;\n}\n.pp-controls .pp-controls-body {\n  position: absolute;\n  inset: 0;\n}\n.pp-controls .pp-slot {\n  position: absolute;\n  display: flex;\n  flex-direction: row;\n  gap: 5px;\n}\n.pp-controls .pp-slot[data-type=tl] {\n  top: 12px;\n  left: 12px;\n  align-items: flex-start;\n}\n.pp-controls .pp-slot[data-type=t] {\n  top: 12px;\n  left: 50%;\n  transform: translateX(-50%);\n  align-items: flex-start;\n}\n.pp-controls .pp-slot[data-type=tr] {\n  top: 12px;\n  right: 12px;\n  align-items: flex-start;\n}\n.pp-controls .pp-slot[data-type=l] {\n  flex-direction: column;\n  top: 50%;\n  left: 12px;\n  transform: translateY(-50%);\n}\n.pp-controls .pp-slot[data-type=r] {\n  flex-direction: column;\n  top: 50%;\n  right: 12px;\n  transform: translateY(-50%);\n}\n.pp-controls .pp-slot[data-type=bl] {\n  bottom: 12px;\n  left: 12px;\n  align-items: flex-end;\n}\n.pp-controls .pp-slot[data-type=b] {\n  bottom: 12px;\n  left: 50%;\n  transform: translateX(-50%);\n  align-items: flex-end;\n}\n.pp-controls .pp-slot[data-type=br] {\n  bottom: 12px;\n  right: 12px;\n  align-items: flex-end;\n}\n\ntext {\n  font-size: 16px;\n}\n\n.pp-marker {\n  display: flex;\n  align-items: center;\n  justify-content: center;\n  color: transparent;\n  font-size: 16px;\n  box-sizing: border-box;\n}\n.pp-marker img, .pp-marker svg {\n  display: block;\n  transition: opacity 0.3s ease;\n  opacity: 0;\n  visibility: hidden;\n  user-select: none;\n  flex-shrink: 0;\n}\n.pp-marker img.pp-loaded, .pp-marker svg.pp-loaded {\n  opacity: 1;\n  visibility: visible;\n}\n.pp-marker[data-type=label], .pp-marker[data-type=label-icon], .pp-marker[data-type=icon-label] {\n  flex-direction: row;\n  gap: 0.2em;\n  padding: 0.4em;\n  line-height: 1.2;\n  white-space: nowrap;\n  user-select: none;\n  box-sizing: border-box;\n}\n.pp-marker[data-type=label] svg, .pp-marker[data-type=label-icon] svg, .pp-marker[data-type=icon-label] svg {\n  width: 1.25em;\n  height: 1.25em;\n}\n.pp-marker[data-type=icon] {\n  padding: 0.2em;\n}\n.pp-marker[data-type=icon] svg {\n  width: 1em;\n  height: 1em;\n}';
   const overlayscrollbarsCss = '/*! \n * OverlayScrollbars\n * Version: 2.16.0\n * \n * Copyright (c) Rene Haas | KingSora.\n * https://github.com/KingSora\n * \n * Released under the MIT license.\n */\n.os-size-observer,\n.os-size-observer-listener {\n  scroll-behavior: auto !important;\n  direction: inherit;\n  pointer-events: none;\n  overflow: hidden;\n  visibility: hidden;\n  box-sizing: border-box;\n}\n\n.os-size-observer,\n.os-size-observer-listener,\n.os-size-observer-listener-item,\n.os-size-observer-listener-item-final {\n  writing-mode: horizontal-tb;\n  position: absolute;\n  left: 0;\n  top: 0;\n}\n\n.os-size-observer {\n  z-index: -1;\n  contain: strict;\n  display: flex;\n  flex-direction: row;\n  flex-wrap: nowrap;\n  padding: inherit;\n  border: inherit;\n  box-sizing: inherit;\n  margin: -133px;\n  top: 0;\n  right: 0;\n  bottom: 0;\n  left: 0;\n  transform: scale(0.1);\n}\n.os-size-observer::before {\n  content: "";\n  flex: none;\n  box-sizing: inherit;\n  padding: 10px;\n  width: 10px;\n  height: 10px;\n}\n\n.os-size-observer-appear {\n  animation: os-size-observer-appear-animation 1ms forwards;\n}\n\n.os-size-observer-listener {\n  box-sizing: border-box;\n  position: relative;\n  flex: auto;\n  padding: inherit;\n  border: inherit;\n  margin: -133px;\n  transform: scale(calc(1 / 0.1));\n}\n.os-size-observer-listener.ltr {\n  margin-right: -266px;\n  margin-left: 0;\n}\n.os-size-observer-listener.rtl {\n  margin-left: -266px;\n  margin-right: 0;\n}\n.os-size-observer-listener:empty::before {\n  content: "";\n  width: 100%;\n  height: 100%;\n}\n.os-size-observer-listener:empty::before, .os-size-observer-listener > .os-size-observer-listener-item {\n  display: block;\n  position: relative;\n  padding: inherit;\n  border: inherit;\n  box-sizing: content-box;\n  flex: auto;\n}\n\n.os-size-observer-listener-scroll {\n  box-sizing: border-box;\n  display: flex;\n}\n\n.os-size-observer-listener-item {\n  right: 0;\n  bottom: 0;\n  overflow: hidden;\n  direction: ltr;\n  flex: none;\n}\n\n.os-size-observer-listener-item-final {\n  transition: none;\n}\n\n@keyframes os-size-observer-appear-animation {\n  from {\n    cursor: auto;\n  }\n  to {\n    cursor: none;\n  }\n}\n.os-trinsic-observer {\n  flex: none;\n  box-sizing: border-box;\n  position: relative;\n  max-width: 0px;\n  max-height: 1px;\n  padding: 0;\n  margin: 0;\n  border: none;\n  overflow: hidden;\n  z-index: -1;\n  height: 0;\n  top: calc(100% + 1px);\n  contain: strict;\n}\n.os-trinsic-observer:not(:empty) {\n  height: calc(100% + 1px);\n  top: -1px;\n}\n.os-trinsic-observer:not(:empty) > .os-size-observer {\n  width: 1000%;\n  height: 1000%;\n  min-height: 1px;\n  min-width: 1px;\n}\n\n/**\n * hide native scrollbars\n * changes to this styles need to be reflected in the environment styles to correctly detect scrollbar hiding\n */\n/**\n * body element\n */\nhtml[data-overlayscrollbars-body] {\n  overflow: hidden;\n}\n\nhtml[data-overlayscrollbars-body],\nhtml[data-overlayscrollbars-body] > body {\n  width: 100%;\n  height: 100%;\n  margin: 0;\n}\n\nhtml[data-overlayscrollbars-body] > body {\n  overflow: visible;\n  margin: 0;\n}\n\n/**\n * structure setup \n */\n[data-overlayscrollbars] {\n  position: relative;\n}\n\n[data-overlayscrollbars~=host],\n[data-overlayscrollbars-padding] {\n  display: flex;\n  align-items: stretch !important;\n  flex-direction: row !important;\n  flex-wrap: nowrap !important;\n  scroll-behavior: auto !important;\n}\n\n[data-overlayscrollbars-padding],\n[data-overlayscrollbars-viewport]:not([data-overlayscrollbars]) {\n  box-sizing: inherit;\n  position: relative;\n  flex: auto;\n  height: auto;\n  width: 100%;\n  min-width: 0;\n  padding: 0;\n  margin: 0;\n  border: none;\n  z-index: 0;\n}\n\n[data-overlayscrollbars-viewport]:not([data-overlayscrollbars]) {\n  --os-vaw: 0;\n  --os-vah: 0;\n  outline: none;\n}\n[data-overlayscrollbars-viewport]:not([data-overlayscrollbars]):focus {\n  outline: none;\n}\n[data-overlayscrollbars-viewport][data-overlayscrollbars-viewport~=arrange]::before {\n  content: "";\n  position: absolute;\n  pointer-events: none;\n  z-index: -1;\n  min-width: 1px;\n  min-height: 1px;\n  width: var(--os-vaw);\n  height: var(--os-vah);\n}\n\n/**\n * wrapper elements overflow:\n */\n[data-overlayscrollbars~=host],\n[data-overlayscrollbars-padding] {\n  overflow: hidden !important;\n}\n\n[data-overlayscrollbars~=host][data-overlayscrollbars~=noClipping],\n[data-overlayscrollbars-padding~=noClipping] {\n  overflow: visible !important;\n}\n\n/**\n * viewport overflow:\n */\n[data-overlayscrollbars-viewport] {\n  --os-viewport-overflow-x: hidden;\n  --os-viewport-overflow-y: hidden;\n  overflow-x: var(--os-viewport-overflow-x);\n  overflow-y: var(--os-viewport-overflow-y);\n}\n\n[data-overlayscrollbars-viewport~=overflowXVisible] {\n  --os-viewport-overflow-x: visible;\n}\n\n[data-overlayscrollbars-viewport~=overflowXHidden] {\n  --os-viewport-overflow-x: hidden;\n}\n\n[data-overlayscrollbars-viewport~=overflowXScroll] {\n  --os-viewport-overflow-x: scroll;\n}\n\n[data-overlayscrollbars-viewport~=overflowYVisible] {\n  --os-viewport-overflow-y: visible;\n}\n\n[data-overlayscrollbars-viewport~=overflowYHidden] {\n  --os-viewport-overflow-y: hidden;\n}\n\n[data-overlayscrollbars-viewport~=overflowYScroll] {\n  --os-viewport-overflow-y: scroll;\n}\n\n[data-overlayscrollbars-viewport~=overflowImportant] {\n  overflow-x: var(--os-viewport-overflow-x) !important;\n  overflow-y: var(--os-viewport-overflow-y) !important;\n}\n\n/**\n * viewport state modifiers:\n */\n[data-overlayscrollbars-viewport~=noContent]:not(#osFakeId) {\n  font-size: 0 !important;\n  line-height: 0 !important;\n}\n\n[data-overlayscrollbars-viewport~=noContent]:not(#osFakeId)::before,\n[data-overlayscrollbars-viewport~=noContent]:not(#osFakeId)::after,\n[data-overlayscrollbars-viewport~=noContent]:not(#osFakeId) > *:not(#osFakeId) {\n  display: none !important;\n  position: absolute !important;\n  width: 1px !important;\n  height: 1px !important;\n  padding: 0 !important;\n  margin: -1px !important;\n  overflow: hidden !important;\n  clip: rect(0, 0, 0, 0) !important;\n  white-space: nowrap !important;\n  border-width: 0 !important;\n}\n\n[data-overlayscrollbars-viewport~=measuring],\n[data-overlayscrollbars-viewport~=scrolling] {\n  scroll-behavior: auto !important;\n  scroll-snap-type: none !important;\n}\n\n[data-overlayscrollbars-viewport~=measuring][data-overlayscrollbars-viewport~=overflowXVisible] {\n  overflow-x: hidden !important;\n}\n\n[data-overlayscrollbars-viewport~=measuring][data-overlayscrollbars-viewport~=overflowYVisible] {\n  overflow-y: hidden !important;\n}\n\n/**\n * content element:\n */\n[data-overlayscrollbars-content] {\n  box-sizing: inherit;\n}\n\n/**\n * Display contents to bridge any flickering during deferred initialization.\n */\n[data-overlayscrollbars-contents]:not(#osFakeId):not([data-overlayscrollbars-padding]):not([data-overlayscrollbars-viewport]):not([data-overlayscrollbars-content]) {\n  display: contents;\n}\n\n/**\n * optional & experimental grid mode\n */\n[data-overlayscrollbars-grid],\n[data-overlayscrollbars-grid] [data-overlayscrollbars-padding] {\n  display: grid;\n  grid-template: 1fr/1fr;\n}\n\n[data-overlayscrollbars-grid] > [data-overlayscrollbars-padding],\n[data-overlayscrollbars-grid] > [data-overlayscrollbars-viewport],\n[data-overlayscrollbars-grid] > [data-overlayscrollbars-padding] > [data-overlayscrollbars-viewport] {\n  height: auto !important;\n  width: auto !important;\n}\n\n@property --os-scroll-percent {\n  syntax: "<number>";\n  inherits: true;\n  initial-value: 0;\n}\n@property --os-viewport-percent {\n  syntax: "<number>";\n  inherits: true;\n  initial-value: 0;\n}\n.os-scrollbar {\n  --os-viewport-percent: 0;\n  --os-scroll-percent: 0;\n  --os-scroll-direction: 0;\n  --os-scroll-percent-directional: calc(\n    var(--os-scroll-percent) - (var(--os-scroll-percent) + (1 - var(--os-scroll-percent)) * -1) *\n      var(--os-scroll-direction)\n  );\n}\n\n.os-scrollbar {\n  contain: size layout;\n  contain: size layout style;\n  transition: opacity 0.15s, visibility 0.15s, top 0.15s, right 0.15s, bottom 0.15s, left 0.15s;\n  pointer-events: none;\n  position: absolute;\n  opacity: 0;\n  visibility: hidden;\n}\n\nbody > .os-scrollbar {\n  position: fixed;\n  z-index: 99999;\n}\n\n.os-scrollbar-transitionless {\n  transition: none !important;\n}\n\n.os-scrollbar-track {\n  position: relative;\n  padding: 0 !important;\n  border: none !important;\n}\n\n.os-scrollbar-handle {\n  position: absolute;\n}\n\n.os-scrollbar-track,\n.os-scrollbar-handle {\n  pointer-events: none;\n  width: 100%;\n  height: 100%;\n}\n\n.os-scrollbar.os-scrollbar-track-interactive .os-scrollbar-track,\n.os-scrollbar.os-scrollbar-handle-interactive .os-scrollbar-handle {\n  pointer-events: auto;\n  touch-action: none;\n}\n\n.os-scrollbar-horizontal {\n  bottom: 0;\n  left: 0;\n}\n\n.os-scrollbar-vertical {\n  top: 0;\n  right: 0;\n}\n\n.os-scrollbar-rtl.os-scrollbar-horizontal {\n  right: 0;\n}\n\n.os-scrollbar-rtl.os-scrollbar-vertical {\n  right: auto;\n  left: 0;\n}\n\n.os-scrollbar-visible {\n  opacity: 1;\n  visibility: visible;\n}\n\n.os-scrollbar-auto-hide.os-scrollbar-auto-hide-hidden {\n  opacity: 0;\n  visibility: hidden;\n}\n\n.os-scrollbar-interaction.os-scrollbar-visible {\n  opacity: 1;\n  visibility: visible;\n}\n\n.os-scrollbar-unusable,\n.os-scrollbar-unusable *,\n.os-scrollbar-wheel,\n.os-scrollbar-wheel * {\n  pointer-events: none !important;\n}\n\n.os-scrollbar-unusable .os-scrollbar-handle {\n  opacity: 0 !important;\n  transition: none !important;\n}\n\n.os-scrollbar-horizontal .os-scrollbar-handle {\n  bottom: 0;\n  left: calc(var(--os-scroll-percent-directional) * 100%);\n  transform: translateX(calc(var(--os-scroll-percent-directional) * -100%));\n  width: calc(var(--os-viewport-percent) * 100%);\n}\n\n.os-scrollbar-vertical .os-scrollbar-handle {\n  right: 0;\n  top: calc(var(--os-scroll-percent-directional) * 100%);\n  transform: translateY(calc(var(--os-scroll-percent-directional) * -100%));\n  height: calc(var(--os-viewport-percent) * 100%);\n}\n\n@supports (container-type: size) {\n  .os-scrollbar-track {\n    container-type: size;\n  }\n  .os-scrollbar-horizontal .os-scrollbar-handle {\n    left: auto;\n    transform: translateX(calc(var(--os-scroll-percent-directional) * 100cqw + var(--os-scroll-percent-directional) * -100%));\n  }\n  .os-scrollbar-vertical .os-scrollbar-handle {\n    top: auto;\n    transform: translateY(calc(var(--os-scroll-percent-directional) * 100cqh + var(--os-scroll-percent-directional) * -100%));\n  }\n  .os-scrollbar-rtl.os-scrollbar-horizontal .os-scrollbar-handle {\n    right: auto;\n    left: 0;\n  }\n}\n.os-scrollbar-rtl.os-scrollbar-vertical .os-scrollbar-handle {\n  right: auto;\n  left: 0;\n}\n\n.os-scrollbar.os-scrollbar-horizontal.os-scrollbar-cornerless,\n.os-scrollbar.os-scrollbar-horizontal.os-scrollbar-cornerless.os-scrollbar-rtl {\n  left: 0;\n  right: 0;\n}\n\n.os-scrollbar.os-scrollbar-vertical.os-scrollbar-cornerless,\n.os-scrollbar.os-scrollbar-vertical.os-scrollbar-cornerless.os-scrollbar-rtl {\n  top: 0;\n  bottom: 0;\n}\n\n@media print {\n  .os-scrollbar {\n    display: none;\n  }\n}\n.os-scrollbar {\n  --os-size: 0;\n  --os-padding-perpendicular: 0;\n  --os-padding-axis: 0;\n  --os-track-border-radius: 0;\n  --os-track-bg: none;\n  --os-track-bg-hover: none;\n  --os-track-bg-active: none;\n  --os-track-border: none;\n  --os-track-border-hover: none;\n  --os-track-border-active: none;\n  --os-handle-border-radius: 0;\n  --os-handle-bg: none;\n  --os-handle-bg-hover: none;\n  --os-handle-bg-active: none;\n  --os-handle-border: none;\n  --os-handle-border-hover: none;\n  --os-handle-border-active: none;\n  --os-handle-min-size: 33px;\n  --os-handle-max-size: none;\n  --os-handle-perpendicular-size: 100%;\n  --os-handle-perpendicular-size-hover: 100%;\n  --os-handle-perpendicular-size-active: 100%;\n  --os-handle-interactive-area-offset: 0;\n}\n\n.os-scrollbar-track {\n  border: var(--os-track-border);\n  border-radius: var(--os-track-border-radius);\n  background: var(--os-track-bg);\n  transition: opacity 0.15s, background-color 0.15s, border-color 0.15s;\n}\n.os-scrollbar-track:hover {\n  border: var(--os-track-border-hover);\n  background: var(--os-track-bg-hover);\n}\n.os-scrollbar-track:active {\n  border: var(--os-track-border-active);\n  background: var(--os-track-bg-active);\n}\n\n.os-scrollbar-handle {\n  border: var(--os-handle-border);\n  border-radius: var(--os-handle-border-radius);\n  background: var(--os-handle-bg);\n}\n.os-scrollbar-handle:hover {\n  border: var(--os-handle-border-hover);\n  background: var(--os-handle-bg-hover);\n}\n.os-scrollbar-handle:active {\n  border: var(--os-handle-border-active);\n  background: var(--os-handle-bg-active);\n}\n\n.os-scrollbar-track:before,\n.os-scrollbar-handle:before {\n  content: "";\n  position: absolute;\n  left: 0;\n  right: 0;\n  top: 0;\n  bottom: 0;\n  display: block;\n}\n\n.os-scrollbar-horizontal {\n  padding: var(--os-padding-perpendicular) var(--os-padding-axis);\n  right: var(--os-size);\n  height: var(--os-size);\n}\n.os-scrollbar-horizontal.os-scrollbar-rtl {\n  left: var(--os-size);\n  right: 0;\n}\n.os-scrollbar-horizontal .os-scrollbar-track:before {\n  top: calc(var(--os-padding-perpendicular) * -1);\n  bottom: calc(var(--os-padding-perpendicular) * -1);\n}\n.os-scrollbar-horizontal .os-scrollbar-handle {\n  min-width: var(--os-handle-min-size);\n  max-width: var(--os-handle-max-size);\n  height: var(--os-handle-perpendicular-size);\n  transition: opacity 0.15s, background-color 0.15s, border-color 0.15s, height 0.15s;\n}\n.os-scrollbar-horizontal .os-scrollbar-handle:before {\n  top: calc((var(--os-padding-perpendicular) + var(--os-handle-interactive-area-offset)) * -1);\n  bottom: calc(var(--os-padding-perpendicular) * -1);\n}\n.os-scrollbar-horizontal:hover .os-scrollbar-handle {\n  height: var(--os-handle-perpendicular-size-hover);\n}\n.os-scrollbar-horizontal:active .os-scrollbar-handle {\n  height: var(--os-handle-perpendicular-size-active);\n}\n\n.os-scrollbar-vertical {\n  padding: var(--os-padding-axis) var(--os-padding-perpendicular);\n  bottom: var(--os-size);\n  width: var(--os-size);\n}\n.os-scrollbar-vertical .os-scrollbar-track:before {\n  left: calc(var(--os-padding-perpendicular) * -1);\n  right: calc(var(--os-padding-perpendicular) * -1);\n}\n.os-scrollbar-vertical .os-scrollbar-handle {\n  min-height: var(--os-handle-min-size);\n  max-height: var(--os-handle-max-size);\n  width: var(--os-handle-perpendicular-size);\n  transition: opacity 0.15s, background-color 0.15s, border-color 0.15s, width 0.15s;\n}\n.os-scrollbar-vertical .os-scrollbar-handle:before {\n  left: calc((var(--os-padding-perpendicular) + var(--os-handle-interactive-area-offset)) * -1);\n  right: calc(var(--os-padding-perpendicular) * -1);\n}\n.os-scrollbar-vertical.os-scrollbar-rtl .os-scrollbar-handle:before {\n  right: calc((var(--os-padding-perpendicular) + var(--os-handle-interactive-area-offset)) * -1);\n  left: calc(var(--os-padding-perpendicular) * -1);\n}\n.os-scrollbar-vertical:hover .os-scrollbar-handle {\n  width: var(--os-handle-perpendicular-size-hover);\n}\n.os-scrollbar-vertical:active .os-scrollbar-handle {\n  width: var(--os-handle-perpendicular-size-active);\n}\n\n/* NONE THEME: */\n[data-overlayscrollbars-viewport~=measuring] > .os-scrollbar,\n.os-theme-none.os-scrollbar {\n  display: none !important;\n}\n\n/* DARK & LIGHT THEME: */\n.os-theme-dark,\n.os-theme-light {\n  box-sizing: border-box;\n  --os-size: 10px;\n  --os-padding-perpendicular: 2px;\n  --os-padding-axis: 2px;\n  --os-track-border-radius: 10px;\n  --os-handle-interactive-area-offset: 4px;\n  --os-handle-border-radius: 10px;\n}\n\n.os-theme-dark {\n  --os-handle-bg: rgba(0, 0, 0, 0.44);\n  --os-handle-bg-hover: rgba(0, 0, 0, 0.55);\n  --os-handle-bg-active: rgba(0, 0, 0, 0.66);\n}\n\n.os-theme-light {\n  --os-handle-bg: rgba(255, 255, 255, 0.44);\n  --os-handle-bg-hover: rgba(255, 255, 255, 0.55);\n  --os-handle-bg-active: rgba(255, 255, 255, 0.66);\n}\n\n[data-overlayscrollbars-initialize]:not([data-overlayscrollbars-viewport]),\n[data-overlayscrollbars-viewport~=scrollbarHidden],\nhtml[data-overlayscrollbars-viewport~=scrollbarHidden] > body {\n  scrollbar-width: none !important;\n}\n\n[data-overlayscrollbars-initialize]:not([data-overlayscrollbars-viewport])::-webkit-scrollbar,\n[data-overlayscrollbars-initialize]:not([data-overlayscrollbars-viewport])::-webkit-scrollbar-corner,\n[data-overlayscrollbars-viewport~=scrollbarHidden]::-webkit-scrollbar,\n[data-overlayscrollbars-viewport~=scrollbarHidden]::-webkit-scrollbar-corner,\nhtml[data-overlayscrollbars-viewport~=scrollbarHidden] > body::-webkit-scrollbar,\nhtml[data-overlayscrollbars-viewport~=scrollbarHidden] > body::-webkit-scrollbar-corner {\n  -webkit-appearance: none !important;\n          appearance: none !important;\n  display: none !important;\n  width: 0 !important;\n  height: 0 !important;\n}\n\n[data-overlayscrollbars-initialize]:not([data-overlayscrollbars]):not(html):not(body) {\n  overflow: auto;\n}';
   class InteractiveMapApiImpl {
     static instances=new Map;
@@ -105468,24 +105512,24 @@
       }) ]
     });
   };
-  const LayerStatic = () => {
+  const LayerNonInteractive = () => {
     const layers = useLayerStore(s => s.layers.entities);
     const selectedLayerIds = useLayoutStore(s => s.selectedLayerIds);
     const selectedLayers = reactExports.useMemo(() => selectedLayerIds.map(id => layers[id]).filter(layer => layer?.type === LayerType$1.Object), [ selectedLayerIds, layers ]);
     const hasNotValidLayers = selectedLayers.length !== selectedLayerIds.length;
-    const {commonStatic: commonStatic, isMixed: isMixed} = reactExports.useMemo(() => {
+    const {commonNonInteractive: commonNonInteractive, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedLayers.length === 0) return {
-        commonStatic: false,
+        commonNonInteractive: false,
         isMixed: false
       };
-      const values = selectedLayers.map(l => l.static);
+      const values = selectedLayers.map(l => l.nonInteractive);
       const unique = new Set(values);
       if (unique.size === 1) return {
-        commonStatic: values[0] ?? false,
+        commonNonInteractive: values[0] ?? false,
         isMixed: false
       };
       return {
-        commonStatic: false,
+        commonNonInteractive: false,
         isMixed: true
       };
     }, [ selectedLayers ]);
@@ -105493,7 +105537,7 @@
       const items = selectedLayers.map(layer => ({
         id: layer.id,
         updates: {
-          static: checked || void 0
+          nonInteractive: checked || void 0
         }
       }));
       Service.actions.layers.update(items);
@@ -105507,13 +105551,13 @@
     return jsxRuntimeExports.jsxs("div", {
       className: "flex gap-1",
       children: [ jsxRuntimeExports.jsx(Checkbox, {
-        id: "picpoints-layer-static",
+        id: "picpoints-layer-noninteractive",
         mixed: isMixed,
-        checked: commonStatic,
+        checked: commonNonInteractive,
         onCheckedChange: handleCheckedChange
       }), jsxRuntimeExports.jsx(Label$2, {
-        htmlFor: "picpoints-layer-static",
-        children: "Static"
+        htmlFor: "picpoints-layer-noninteractive",
+        children: "Noninteractive"
       }) ]
     });
   };
@@ -105551,7 +105595,7 @@
           value: "hover",
           children: [ jsxRuntimeExports.jsx(MarkerLayerHoverStyleColor, {}), jsxRuntimeExports.jsx(MarkerLayerHoverStyleBackground, {}), jsxRuntimeExports.jsx(MarkerLayerHoverStyleBorderRadius, {}), jsxRuntimeExports.jsx(MarkerLayerHoverStyleOpacity, {}), jsxRuntimeExports.jsx(ShapeLayerHoverStyleFill, {}), jsxRuntimeExports.jsx(ShapeLayerHoverStyleStroke, {}), jsxRuntimeExports.jsx(ShapeLayerHoverStyleStrokeWidth, {}), jsxRuntimeExports.jsx(ShapeLayerHoverStyleOpacity, {}) ]
         }) ]
-      }), jsxRuntimeExports.jsx(LayerStatic, {}), jsxRuntimeExports.jsx(ShapeLayerStyleFixedStroke, {}) ]
+      }), jsxRuntimeExports.jsx(LayerNonInteractive, {}), jsxRuntimeExports.jsx(ShapeLayerStyleFixedStroke, {}) ]
     });
   };
   var AttributeType;

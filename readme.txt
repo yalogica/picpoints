@@ -3,7 +3,7 @@ Contributors: yalogica, freemius
 Tags: interactive map, imagemap, svg map, hotspots, floor plan
 Requires at least: 6.0
 Tested up to: 7.1
-Stable tag: 1.21.1
+Stable tag: 1.22.0
 Requires PHP: 7.4
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -175,6 +175,11 @@ Yes! You can use rich-text popups to insert product links, images, and prices. W
 
 
 == Changelog ==
+
+= 1.22.0 =
+* Added: Lock layers (and entire groups) to prevent accidental changes in the builder
+* Changed: Renamed the layer attribute "static" to "noninteractive"
+* Changed: Updated the Freemius SDK to 2.13.5
 
 = 1.21.1 =
 * Changed: Redesigned the upgrade to PRO dialog
