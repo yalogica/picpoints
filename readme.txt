@@ -3,7 +3,7 @@ Contributors: yalogica, freemius
 Tags: interactive map, imagemap, svg map, hotspots, floor plan
 Requires at least: 6.0
 Tested up to: 7.1
-Stable tag: 1.22.0
+Stable tag: 1.22.1
 Requires PHP: 7.4
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -175,6 +175,9 @@ Yes! You can use rich-text popups to insert product links, images, and prices. W
 
 
 == Changelog ==
+
+= 1.22.1 =
+* Changed: Minor updates to the upgrade dialog
 
 = 1.22.0 =
 * Added: Lock layers (and entire groups) to prevent accidental changes in the builder

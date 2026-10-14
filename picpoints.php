@@ -3,7 +3,7 @@
  * Plugin Name:       PicPoints - Interactive Image Map & Hotspot Builder
  * Plugin URI:        https://yalogica.com/picpoints
  * Description:       Create responsive interactive images, online soundboard maps, and image hotspots with tooltips or sound effects. Easy SVG builder without coding
- * Version:           1.22.0
+ * Version:           1.22.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Yalogica
@@ -18,7 +18,7 @@ namespace Yalogica\PicPoints;
 defined('ABSPATH') || exit;
 
 define('PICPOINTS_PLUGIN_NAME', 'picpoints');
-define('PICPOINTS_PLUGIN_VERSION', '1.22.0');
+define('PICPOINTS_PLUGIN_VERSION', '1.22.1');
 define('PICPOINTS_PLUGIN_BASE_NAME', plugin_basename(__FILE__));
 define('PICPOINTS_PLUGIN_PATH', __DIR__);
 define('PICPOINTS_PLUGIN_URL', plugin_dir_url(__FILE__));

@@ -24775,7 +24775,7 @@
     },
     lifetime: {
       label: "Lifetime",
-      price: "$89 one-time",
+      price: "$119 one-time",
       note: "Pay once, keep PRO forever"
     }
   };
