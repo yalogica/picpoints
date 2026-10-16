@@ -21878,6 +21878,7 @@
                 sceneId: sceneId,
                 parentId: parent,
                 name: node.name,
+                dataName: node.dataName,
                 hidden: node.hidden,
                 nonInteractive: node.nonInteractive,
                 className: node.className,
@@ -21899,6 +21900,7 @@
                 sceneId: sceneId,
                 parentId: parent,
                 name: node.name,
+                dataName: node.dataName,
                 hidden: node.hidden,
                 nonInteractive: node.nonInteractive,
                 className: node.className,
@@ -25483,6 +25485,7 @@
                   sceneId: sceneId,
                   parentId: parentId,
                   name: layer.name,
+                  dataName: layer.dataName,
                   hidden: layer.hidden,
                   nonInteractive: layer.nonInteractive,
                   className: layer.className,
@@ -25503,6 +25506,7 @@
                   sceneId: sceneId,
                   parentId: parentId,
                   name: layer.name,
+                  dataName: layer.dataName,
                   hidden: layer.hidden,
                   nonInteractive: layer.nonInteractive,
                   className: layer.className,
@@ -82262,6 +82266,7 @@
       g.style.setProperty("--pp-g-index", `${index}`);
       g.classList.add("pp-layer-group");
       if (layer.className) g.classList.add(...normalizeClassList(layer.className));
+      if (layer.dataName && layer.name) g.setAttribute("data-name", layer.name);
       const children = layer.children ?? [];
       for (let i = children.length - 1; i >= 0; i--) {
         const child = this.renderNode(children[i], i);
@@ -82327,6 +82332,7 @@
         }
       }
       if (layer.className) shapeEl.classList.add(...normalizeClassList(layer.className));
+      if (layer.dataName && layer.name) shapeEl.setAttribute("data-name", layer.name);
     }
     createImage(layer, obj, index) {
       const x = obj.x ?? 0;
@@ -83420,6 +83426,7 @@
       g.style.setProperty("--pp-g-index", `${index}`);
       g.classList.add("pp-layer-group");
       if (layer.className) g.classList.add(...normalizeClassList(layer.className));
+      if (layer.dataName && layer.name) g.setAttribute("data-name", layer.name);
       const children = layer.children ?? [];
       for (let i = children.length - 1; i >= 0; i--) {
         const child = this.renderNode(children[i], i);
@@ -83557,6 +83564,7 @@
         }
       }
       if (layer.className) markerEl.classList.add(...normalizeClassList(layer.className));
+      if (layer.dataName && layer.name) markerEl.setAttribute("data-name", layer.name);
     }
     releaseStyles() {
       for (const cls of this.appliedClasses) this.mapApi.styleApi.removeStyle(cls);
@@ -101699,20 +101707,19 @@
     const layers = useLayerStore(s => s.layers.entities);
     const selectedLayerIds = useLayoutStore(s => s.selectedLayerIds);
     const selectedLayers = reactExports.useMemo(() => selectedLayerIds.map(id => layers[id]).filter(layer => layer != null), [ selectedLayerIds, layers ]);
-    const {commonName: commonName, isMixed: isMixed} = reactExports.useMemo(() => {
+    const {commonName: commonName, isMixed: isMixed, commonDataName: commonDataName} = reactExports.useMemo(() => {
       if (selectedLayers.length === 0) return {
         commonName: void 0,
-        isMixed: false
+        isMixed: false,
+        commonDataName: false
       };
       const values = selectedLayers.map(l => l.name);
       const unique = new Set(values);
-      if (unique.size === 1) return {
-        commonName: values[0],
-        isMixed: false
-      };
+      const dataNameValues = new Set(selectedLayers.map(l => l.dataName ?? false));
       return {
-        commonName: void 0,
-        isMixed: true
+        commonName: unique.size === 1 ? values[0] : void 0,
+        isMixed: unique.size !== 1,
+        commonDataName: [ ...dataNameValues ].length === 1 && [ ...dataNameValues ][0]
       };
     }, [ selectedLayers ]);
     const commitLayerName = reactExports.useCallback(name => {
@@ -101733,6 +101740,15 @@
       },
       commit: commitLayerName
     });
+    const toggleDataName = reactExports.useCallback(() => {
+      const items = selectedLayers.map(layer => ({
+        id: layer.id,
+        updates: {
+          dataName: !commonDataName || void 0
+        }
+      }));
+      Service.actions.layers.update(items);
+    }, [ selectedLayers, commonDataName ]);
     const handleChange = reactExports.useCallback(e => {
       setLocalValue(e.target.value);
     }, []);
@@ -101746,12 +101762,30 @@
       className: "grid grid-cols-[minmax(100px,max-content)_1fr] gap-1 items-center",
       children: [ jsxRuntimeExports.jsx(Label$2, {
         children: "Name"
-      }), jsxRuntimeExports.jsx(Input, {
-        placeholder: isMixed ? "Mixed values" : void 0,
-        value: localValue,
-        onChange: handleChange,
-        onBlur: handleBlur,
-        onKeyDown: handleKeyDown
+      }), jsxRuntimeExports.jsxs("div", {
+        className: "relative flex gap-1 items-center",
+        children: [ jsxRuntimeExports.jsxs(Tooltip, {
+          children: [ jsxRuntimeExports.jsx(TooltipTrigger, {
+            asChild: true,
+            children: jsxRuntimeExports.jsx(Button$1, {
+              variant: "ghost",
+              size: "tiny",
+              onClick: toggleDataName,
+              className: cn(commonDataName && "text-primary [&_svg]:fill-primary/30", "absolute top-1/2 -left-1 -translate-x-full -translate-y-1/2"),
+              children: jsxRuntimeExports.jsx(Icons.Tag, {
+                size: 16
+              })
+            })
+          }), jsxRuntimeExports.jsx(TooltipContent, {
+            children: "Show name as 'data-name' attribute in the player"
+          }) ]
+        }), jsxRuntimeExports.jsx(Input, {
+          placeholder: isMixed ? "Mixed values" : void 0,
+          value: localValue,
+          onChange: handleChange,
+          onBlur: handleBlur,
+          onKeyDown: handleKeyDown
+        }) ]
       }) ]
     });
   };

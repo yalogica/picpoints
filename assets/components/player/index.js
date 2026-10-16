@@ -13432,6 +13432,7 @@
       g.style.setProperty("--pp-g-index", `${index}`);
       g.classList.add("pp-layer-group");
       if (layer.className) g.classList.add(...normalizeClassList(layer.className));
+      if (layer.dataName && layer.name) g.setAttribute("data-name", layer.name);
       const children = layer.children ?? [];
       for (let i = children.length - 1; i >= 0; i--) {
         const child = this.renderNode(children[i], i);
@@ -13497,6 +13498,7 @@
         }
       }
       if (layer.className) shapeEl.classList.add(...normalizeClassList(layer.className));
+      if (layer.dataName && layer.name) shapeEl.setAttribute("data-name", layer.name);
     }
     createImage(layer, obj, index) {
       const x = obj.x ?? 0;
@@ -14590,6 +14592,7 @@
       g.style.setProperty("--pp-g-index", `${index}`);
       g.classList.add("pp-layer-group");
       if (layer.className) g.classList.add(...normalizeClassList(layer.className));
+      if (layer.dataName && layer.name) g.setAttribute("data-name", layer.name);
       const children = layer.children ?? [];
       for (let i = children.length - 1; i >= 0; i--) {
         const child = this.renderNode(children[i], i);
@@ -14727,6 +14730,7 @@
         }
       }
       if (layer.className) markerEl.classList.add(...normalizeClassList(layer.className));
+      if (layer.dataName && layer.name) markerEl.setAttribute("data-name", layer.name);
     }
     releaseStyles() {
       for (const cls of this.appliedClasses) this.mapApi.styleApi.removeStyle(cls);
