@@ -3,7 +3,7 @@ Contributors: yalogica, freemius
 Tags: interactive map, imagemap, svg map, hotspots, floor plan
 Requires at least: 6.0
 Tested up to: 7.1
-Stable tag: 1.23.0
+Stable tag: 1.23.1
 Requires PHP: 7.4
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -175,6 +175,12 @@ Yes! You can use rich-text popups to insert product links, images, and prices. W
 
 
 == Changelog ==
+
+= 1.23.1 =
+* Fixed: Fatal error that could occur when both the free and Pro versions of the plugin were active at the same time
+* Fixed: Pressing and holding an image layer or marker on a touchscreen no longer opens the browser menu offering to download or open the image, an important fix for kiosk and tablet deployments
+* Fixed: The map placeholder now shows the preconfigured viewport background color or image immediately, before the player loads
+* Changed: Removed the unused Composer autoloader, plugin classes are now loaded exclusively through the built-in autoloader
 
 = 1.23.0 =
 * Added: New "data-name" layer option, output the layer name as a data-name attribute in the player for easier custom CSS and JS targeting

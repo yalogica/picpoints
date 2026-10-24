@@ -70,6 +70,26 @@ class Utils {
     return $default;
   }
 
+  public static function sanitizeColor($value)
+  {
+    $value = trim((string) $value);
+    if ($value === '') {
+      return '';
+    }
+
+    // hex: #rgb, #rgba, #rrggbb, #rrggbbaa
+    if (preg_match('/^#([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i', $value)) {
+      return $value;
+    }
+
+    // rgb()/rgba()/hsl()/hsla()
+    if (preg_match('/^(rgba?|hsla?)\(\s*[\d\s%,.\/-]{1,64}\s*\)$/i', $value)) {
+      return $value;
+    }
+
+    return '';
+  }
+
   public static function getAllowedHtml() {
     return [
       'h1' => ['id' => true, 'class' => true, 'style' => true],

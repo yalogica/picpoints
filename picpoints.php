@@ -3,7 +3,7 @@
  * Plugin Name:       PicPoints - Interactive Image Map & Hotspot Builder
  * Plugin URI:        https://yalogica.com/picpoints
  * Description:       Create responsive interactive images, online soundboard maps, and image hotspots with tooltips or sound effects. Easy SVG builder without coding
- * Version:           1.23.0
+ * Version:           1.23.1
  * Requires at least: 6.0
  * Requires PHP:      7.4
  * Author:            Yalogica
@@ -17,8 +17,21 @@ namespace Yalogica\PicPoints;
 
 defined('ABSPATH') || exit;
 
+// Exit before any require to prevent a fatal error caused by redeclaring classes
+if ( class_exists( 'Yalogica\PicPoints\Plugin' ) ) {
+  return;
+}
+
+if ( 
+  ( in_array( 'picpoints-pro/picpoints.php', (array) get_option( 'active_plugins' ), true ) ||
+    array_key_exists( 'picpoints-pro/picpoints.php', (array) get_site_option( 'active_sitewide_plugins' ) ) ) &&
+  file_exists( WP_PLUGIN_DIR . '/picpoints-pro/picpoints.php' )
+) {
+  return;
+}
+
 define('PICPOINTS_PLUGIN_NAME', 'picpoints');
-define('PICPOINTS_PLUGIN_VERSION', '1.23.0');
+define('PICPOINTS_PLUGIN_VERSION', '1.23.1');
 define('PICPOINTS_PLUGIN_BASE_NAME', plugin_basename(__FILE__));
 define('PICPOINTS_PLUGIN_PATH', __DIR__);
 define('PICPOINTS_PLUGIN_URL', plugin_dir_url(__FILE__));
@@ -27,7 +40,6 @@ define('PICPOINTS_PLUGIN_PUBLIC_REST_URL', 'picpoints/public/v1');
 define('PICPOINTS_SHORTCODE_NAME', 'picpoints');
 define('PICPOINTS_DOCS_URL', 'https://yalogica.com/docs/picpoints/');
 
-require_once(__DIR__ . '/vendor/autoload.php');
 require_once(__DIR__ . '/includes/autoload.php');
 
 register_activation_hook(__FILE__, ['Yalogica\PicPoints\System\Embed', 'activate']);

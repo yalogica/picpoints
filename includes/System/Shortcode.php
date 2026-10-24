@@ -74,12 +74,23 @@ class Shortcode {
 
     $config = $item['config'] ?? [];
 
-    if (!empty($config['viewerStyle'])) {
-      if (!empty($config['viewerStyle']['background'])) {
-        $css_rules[] = "background-color: {$config['viewerStyle']['background']};";
+    $viewport = isset($config['viewport']) && is_array($config['viewport']) ? $config['viewport'] : [];
+    $background = isset($viewport['background']) && is_array($viewport['background']) ? $viewport['background'] : [];
+    
+    if (!empty($background['enabled'])) {
+      $fill = Utils::sanitizeColor($background['color'] ?? '');
+      $imageUrl = '';
+      if (isset($background['image']['url']) && is_string($background['image']['url'])) {
+        $imageUrl = esc_url($background['image']['url']);
       }
-      if (!empty($config['viewerStyle']['radius'])) {
-        $css_rules[] = "border-radius: {$config['viewerStyle']['radius']}px;";
+      if ($fill !== '') {
+        $css_rules[] = "background-color: {$fill};";
+      }
+      if ($imageUrl !== '') {
+        $css_rules[] = "background-image: url(\"{$imageUrl}\");";
+        $css_rules[] = 'background-position: center;';
+        $css_rules[] = 'background-repeat: no-repeat;';
+        $css_rules[] = 'background-size: cover;';
       }
     }
 
