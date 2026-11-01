@@ -21388,40 +21388,6 @@
         if (newIndex >= siblings.length) return;
         get().actions.move([ id ], parentId, newIndex);
       },
-      toggleCollapsed: id => {
-        set(produce(draft => {
-          const layer = draft.layers.entities[id];
-          if (!layer) {
-            console.warn(`Layer with id ${id} doesn"t exist`);
-            return;
-          }
-          if (layer.type !== LayerType$1.Group) {
-            console.warn(`Layer is not a group (type: "${layer.type}")`);
-            return;
-          }
-          layer.collapsed = !layer.collapsed;
-        }));
-      },
-      toggleHidden: id => {
-        set(produce(draft => {
-          const layer = draft.layers.entities[id];
-          if (!layer) {
-            console.warn(`Layer with id ${id} doesn"t exist`);
-            return;
-          }
-          layer.hidden = !layer.hidden;
-        }));
-      },
-      toggleLock: id => {
-        set(produce(draft => {
-          const layer = draft.layers.entities[id];
-          if (!layer) {
-            console.warn(`Layer with id ${id} doesn"t exist`);
-            return;
-          }
-          layer.lock = !layer.lock;
-        }));
-      },
       toggleTooltip: id => {
         set(produce(draft => {
           const layer = draft.layers.entities[id];
@@ -24767,55 +24733,53 @@
     ...props
   }));
   DialogDescription.displayName = Description.displayName;
+  const DEFAULT_TITLE = "Unlock the full power of PicPoints";
   const DEFAULT_CONTEXT = "PicPoints PRO removes the limits and unlocks the full power of the builder.";
-  const PRO_FEATURES = [ "Unlimited Scenes & Layers", "SVG Import", "Tooltips with Rich Content", "Dynamic Attributes", "Handlebars Templates", "Custom JS & CSS" ];
-  const PLANS = {
-    annual: {
-      label: "Annual",
-      price: "$49 / year",
-      note: "All PRO features, updates & support"
-    },
-    lifetime: {
-      label: "Lifetime",
-      price: "$119 one-time",
-      note: "Pay once, keep PRO forever"
+  const DEFAULT_FEATURES = [ "Unlimited Scenes & Layers", "SVG Import", "Tooltips with Rich Content", "Dynamic Attributes", "Handlebars Templates", "Custom JS & CSS" ];
+  const buildUpgradeUrl = (intent, featureTitle) => {
+    const url = new URL(g$3.data.upgrade_url, window.location.href);
+    url.searchParams.set("utm_source", "picpoints-plugin");
+    url.searchParams.set("utm_medium", "upgrade-dialog");
+    url.searchParams.set("utm_campaign", "picpoints-pro");
+    if (featureTitle) {
+      url.searchParams.set("utm_content", featureTitle.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, ""));
     }
-  };
-  const buildCheckoutUrl = (plan, trial) => {
-    const base = g$3.data.upgrade_url;
-    const params = new URLSearchParams({
-      billing_cycle: plan
-    });
-    if (trial) {
-      params.set("trial", "true");
+    if (intent === "trial") {
+      url.searchParams.set("trial", "true");
+    } else {
+      url.searchParams.delete("trial");
     }
-    return `${base}${base.includes("?") ? "&" : "?"}${params.toString()}`;
+    return url.toString();
   };
-  const DialogUpgradePro = ({featureText: featureText, onConfirm: onConfirm}) => {
+  const DialogUpgradePro = ({featureTitle: featureTitle, featureText: featureText, features: features = DEFAULT_FEATURES, onConfirm: onConfirm}) => {
     const {closeDialog: closeDialog} = useDialogStore();
-    const [plan, setPlan] = reactExports.useState("annual");
-    const checkoutUrl = trial => buildCheckoutUrl(plan, trial);
-    const handleConfirm = () => {
-      closeDialog();
+    const title = featureTitle ?? DEFAULT_TITLE;
+    const trialUrl = buildUpgradeUrl("trial", featureTitle);
+    const plansUrl = buildUpgradeUrl("plans", featureTitle);
+    const handleNavigate = event => {
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+        return;
+      }
       onConfirm?.();
-      window.location.href = checkoutUrl(true);
+      closeDialog();
     };
     return jsxRuntimeExports.jsx(Dialog, {
       open: true,
-      onOpenChange: open => !open && closeDialog(),
+      onOpenChange: open => {
+        if (!open) {
+          closeDialog();
+        }
+      },
       children: jsxRuntimeExports.jsxs(DialogContent, {
-        className: "max-w-140 gap-0 p-7 sm:rounded-2xl",
+        className: "max-w-140 max-h-[90dvh] gap-0 overflow-y-auto p-7 sm:rounded-2xl",
         children: [ jsxRuntimeExports.jsxs(DialogHeader, {
           className: "gap-3",
           children: [ jsxRuntimeExports.jsx("span", {
             className: "inline-flex w-fit items-center rounded-full bg-[#f5f3ff] px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-[#6d28d9]",
             children: "✦ PicPoints PRO"
-          }), jsxRuntimeExports.jsxs(DialogTitle, {
+          }), jsxRuntimeExports.jsx(DialogTitle, {
             className: "text-[22px] font-bold leading-snug tracking-tight",
-            children: [ "Unlock ", jsxRuntimeExports.jsx("em", {
-              className: "not-italic text-[#6d28d9]",
-              children: "premium features"
-            }), " with PicPoints PRO" ]
+            children: title
           }), jsxRuntimeExports.jsx(DialogDescription, {
             className: "text-[14.5px] leading-relaxed",
             children: featureText ?? DEFAULT_CONTEXT
@@ -24826,10 +24790,10 @@
             className: "flex flex-col gap-2.5",
             children: [ jsxRuntimeExports.jsx("p", {
               className: "text-[12.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground",
-              children: "Everything in Free, plus:"
+              children: "Included with PRO"
             }), jsxRuntimeExports.jsx("ul", {
               className: "grid grid-cols-1 gap-x-4 gap-y-2 min-[480px]:grid-cols-2",
-              children: PRO_FEATURES.map(feature => jsxRuntimeExports.jsxs("li", {
+              children: features.map(feature => jsxRuntimeExports.jsxs("li", {
                 className: "flex items-start gap-2 text-[13.5px] leading-snug text-gray-700",
                 children: [ jsxRuntimeExports.jsx(Check, {
                   size: 14,
@@ -24840,53 +24804,61 @@
                 }) ]
               }, feature))
             }) ]
-          }), jsxRuntimeExports.jsx("div", {
-            role: "radiogroup",
-            "aria-label": "Choose a plan",
-            className: "grid grid-cols-1 gap-3 sm:grid-cols-2",
-            children: Object.keys(PLANS).map(id => {
-              const p = PLANS[id];
-              const selected = plan === id;
-              return jsxRuntimeExports.jsxs("label", {
-                className: cn("relative cursor-pointer rounded-xl border p-3.5 transition-colors", selected ? "border-[#6d28d9] bg-[#f5f3ff]" : "border-gray-200 hover:border-gray-300"),
-                children: [ jsxRuntimeExports.jsx("input", {
-                  type: "radio",
-                  name: "pp-pro-plan",
-                  className: "sr-only",
-                  checked: selected,
-                  onChange: () => setPlan(id)
-                }), id === "annual" && jsxRuntimeExports.jsx("span", {
-                  className: "absolute -top-2.5 right-3 rounded-full bg-[#6d28d9] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white",
-                  children: "Recommended"
-                }), jsxRuntimeExports.jsx("span", {
-                  className: "block text-sm font-semibold text-gray-900",
-                  children: p.label
-                }), jsxRuntimeExports.jsx("span", {
-                  className: "mt-1 block text-base font-bold text-gray-900",
-                  children: p.price
-                }), jsxRuntimeExports.jsx("span", {
-                  className: "mt-1 block text-xs text-muted-foreground",
-                  children: p.note
-                }) ]
-              }, id);
-            })
+          }), jsxRuntimeExports.jsxs("div", {
+            className: "grid grid-cols-1 gap-3 min-[480px]:grid-cols-2",
+            children: [ jsxRuntimeExports.jsxs("div", {
+              className: "relative rounded-xl border border-[#6d28d9] bg-[#f5f3ff] p-3.5",
+              children: [ jsxRuntimeExports.jsx("span", {
+                className: "absolute -top-2.5 right-3 rounded-full bg-[#6d28d9] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white",
+                children: "Recommended"
+              }), jsxRuntimeExports.jsx("span", {
+                className: "block text-xs font-medium text-muted-foreground",
+                children: "Annual"
+              }), jsxRuntimeExports.jsx("span", {
+                className: "mt-1 block text-base font-bold text-gray-900",
+                children: "$49 / year"
+              }), jsxRuntimeExports.jsx("span", {
+                className: "mt-1 block text-xs text-muted-foreground",
+                children: "All PRO features, updates & support"
+              }) ]
+            }), jsxRuntimeExports.jsxs("div", {
+              className: "rounded-xl border border-gray-200 p-3.5",
+              children: [ jsxRuntimeExports.jsx("span", {
+                className: "block text-xs font-medium text-muted-foreground",
+                children: "Lifetime"
+              }), jsxRuntimeExports.jsx("span", {
+                className: "mt-1 block text-base font-bold text-gray-900",
+                children: "$119 one-time"
+              }), jsxRuntimeExports.jsx("span", {
+                className: "mt-1 block text-xs text-muted-foreground",
+                children: "Pay once, keep PRO forever"
+              }) ]
+            }) ]
           }), jsxRuntimeExports.jsxs("div", {
             className: "flex flex-col gap-2",
             children: [ jsxRuntimeExports.jsx(Button$1, {
+              asChild: true,
               className: "h-auto w-full rounded-xl bg-[#6d28d9] px-4 py-3.5 text-[15.5px] font-bold text-white hover:bg-[#5b21b6]",
-              onClick: handleConfirm,
-              children: "Try PRO free for 7 days"
+              children: jsxRuntimeExports.jsx("a", {
+                href: trialUrl,
+                target: "_blank",
+                rel: "noopener noreferrer",
+                onClick: handleNavigate,
+                children: "Start your 7-day free trial"
+              })
             }), jsxRuntimeExports.jsx("p", {
               className: "text-center text-xs text-muted-foreground",
-              children: "No credit card required · Full PRO access · Cancel anytime"
+              children: "No credit card required · Opens in a new tab"
             }) ]
           }), jsxRuntimeExports.jsxs("p", {
             className: "text-center text-[13px] text-gray-600",
-            children: [ "Prefer to buy outright?", " ", jsxRuntimeExports.jsxs("a", {
-              href: checkoutUrl(false),
-              onClick: onConfirm,
+            children: [ "Ready to upgrade now?", " ", jsxRuntimeExports.jsx("a", {
+              href: plansUrl,
+              target: "_blank",
+              rel: "noopener noreferrer",
               className: "font-bold text-[#6d28d9] hover:underline",
-              children: [ "Get PRO - ", PLANS[plan].price ]
+              onClick: handleNavigate,
+              children: "View plans and pricing"
             }) ]
           }), jsxRuntimeExports.jsxs("p", {
             className: "flex items-center justify-center gap-1.5 rounded-lg bg-[#ecfdf5] px-4 py-2.5 text-center text-[12.5px] text-[#065f46]",
@@ -24895,18 +24867,6 @@
               strokeWidth: 3,
               className: "shrink-0"
             }), "After the trial, your maps keep rendering exactly as configured." ]
-          }), jsxRuntimeExports.jsxs("p", {
-            className: "flex items-center justify-center gap-1.5 text-[12.5px] text-gray-500",
-            children: [ jsxRuntimeExports.jsx("span", {
-              className: "tracking-wide text-[#f59e0b]",
-              "aria-hidden": "true",
-              children: "★★★★★"
-            }), jsxRuntimeExports.jsxs("span", {
-              children: [ jsxRuntimeExports.jsx("b", {
-                className: "font-bold text-gray-900",
-                children: "5.0"
-              }), " on WordPress.org" ]
-            }) ]
           }) ]
         }) ]
       })
@@ -25487,6 +25447,7 @@
                   name: layer.name,
                   dataName: layer.dataName,
                   hidden: layer.hidden,
+                  lock: layer.lock,
                   nonInteractive: layer.nonInteractive,
                   className: layer.className,
                   attributes: layer.attributes,
@@ -25508,6 +25469,7 @@
                   name: layer.name,
                   dataName: layer.dataName,
                   hidden: layer.hidden,
+                  lock: layer.lock,
                   nonInteractive: layer.nonInteractive,
                   className: layer.className,
                   attributes: layer.attributes,
@@ -38723,6 +38685,31 @@
       children: "Item(s)"
     }) ]
   });
+  const toggleHidden = layer => {
+    Service.actions.layers.update([ {
+      id: layer.id,
+      updates: {
+        hidden: !layer.hidden
+      }
+    } ]);
+  };
+  const toggleCollapsed = layer => {
+    if (layer.type !== LayerType$1.Group) return;
+    Service.actions.layers.update([ {
+      id: layer.id,
+      updates: {
+        collapsed: !layer.collapsed
+      }
+    } ]);
+  };
+  const toggleLock = layer => {
+    Service.actions.layers.update([ {
+      id: layer.id,
+      updates: {
+        lock: !layer.lock
+      }
+    } ]);
+  };
   const LayerIcon = ({layer: layer}) => {
     if (layer.type === LayerType$1.Group) {
       if (layer.childrenIds.length > 0) {
@@ -38756,9 +38743,6 @@
     const layer = useLayerStore(s => s.layers.entities[flattenLayer.id] ?? null);
     const selectedLayerIds = useLayoutStore(s => s.selectedLayerIds);
     const lastSelectedLayerId = useLayoutStore(s => s.lastSelectedLayerId);
-    const toggleCollapsed = useLayerStore(s => s.actions.toggleCollapsed);
-    const toggleHidden = useLayerStore(s => s.actions.toggleHidden);
-    const toggleLock = useLayerStore(s => s.actions.toggleLock);
     const {setNodeRef: setNodeRef, attributes: attributes, listeners: listeners} = useSortable({
       id: flattenLayer.id
     });
@@ -38802,11 +38786,6 @@
         e.currentTarget.blur();
       }
     }, [ layer?.name, setLocalValue ]);
-    const handleToggle = reactExports.useCallback((_e, id) => {
-      if (layer.type === LayerType$1.Group) {
-        toggleCollapsed(id);
-      }
-    }, [ toggleCollapsed ]);
     if (!layer) return null;
     const isActive = lastSelectedLayerId === flattenLayer.id;
     const isSelected = selectedLayerIds.includes(flattenLayer.id);
@@ -38835,7 +38814,7 @@
         ...attributes,
         ...listeners,
         children: [ jsxRuntimeExports.jsx("div", {
-          onClick: e => handleToggle(e, flattenLayer.id),
+          onClick: () => toggleCollapsed(layer),
           children: jsxRuntimeExports.jsx(LayerIcon, {
             layer: layer
           })
@@ -38878,7 +38857,7 @@
               asChild: true,
               children: jsxRuntimeExports.jsx("div", {
                 className: cn("hidden group-hover:block", layer.hidden && "block"),
-                onClick: () => toggleHidden(layer.id),
+                onClick: () => toggleHidden(layer),
                 children: layer.hidden ? jsxRuntimeExports.jsx(Icons.EyeOff, {
                   size: 16
                 }) : jsxRuntimeExports.jsx(Icons.Eye, {
@@ -38893,7 +38872,7 @@
               asChild: true,
               children: jsxRuntimeExports.jsx("div", {
                 className: cn("hidden group-hover:block", layer.lock && "block"),
-                onClick: () => toggleLock(layer.id),
+                onClick: () => toggleLock(layer),
                 children: layer.lock ? jsxRuntimeExports.jsx(Icons.Lock, {
                   size: 16
                 }) : jsxRuntimeExports.jsx(Icons.LockOpen, {
@@ -68479,7 +68458,7 @@
   const PanOverlay = _props => {
     const activeTool = useActiveTool();
     return jsxRuntimeExports.jsx("div", {
-      className: cn("absolute inset-0 pointer-events-none", activeTool === InteractionMode.Hand && "pointer-events-auto cursor-grabbing")
+      className: cn("absolute inset-0 pointer-events-none", activeTool === InteractionMode.Hand && "pointer-events-auto cursor-grab active:cursor-grabbing")
     });
   };
   const CursorOverlay = ({matrix: matrix}) => {
@@ -69248,6 +69227,7 @@
       return s.sceneViewStates[id] ?? EMPTY_VIEW_STATE;
     }));
     const updateViewStateMatrix = useLayoutStore(s => s.actions.scenes.updateViewStateMatrix);
+    const isSpacePressedRef = reactExports.useRef(false);
     const containerRef = reactExports.useRef(null);
     const prevSceneIdRef = reactExports.useRef(null);
     const lastMousePos = reactExports.useRef(null);
@@ -69255,6 +69235,42 @@
     const activeTool = useActiveTool();
     const setCreationTool = useLayoutStore(s => s.actions.tool.setCreationTool);
     const setHandMode = useLayoutStore(s => s.actions.tool.setHandMode);
+    reactExports.useEffect(() => {
+      const isInteractiveTarget = target => {
+        if (!(target instanceof Element)) return false;
+        const interactiveElement = target.closest("input, textarea, select, button, a[href], [contenteditable], [role='textbox']");
+        return interactiveElement !== null;
+      };
+      const handleKeyDown = e => {
+        if (e.code !== "Space" || isInteractiveTarget(e.target)) return;
+        e.preventDefault();
+        if (e.repeat || isSpacePressedRef.current) return;
+        isSpacePressedRef.current = true;
+        setHandMode(true);
+      };
+      const handleKeyUp = e => {
+        if (e.code !== "Space" || !isSpacePressedRef.current) return;
+        e.preventDefault();
+        isSpacePressedRef.current = false;
+        if (!isDraggingCanvas) {
+          setHandMode(false);
+        }
+      };
+      const handleWindowBlur = () => {
+        isSpacePressedRef.current = false;
+        setHandMode(false);
+        setIsDraggingCanvas(false);
+        lastMousePos.current = null;
+      };
+      window.addEventListener("keydown", handleKeyDown);
+      window.addEventListener("keyup", handleKeyUp);
+      window.addEventListener("blur", handleWindowBlur);
+      return () => {
+        window.removeEventListener("keydown", handleKeyDown);
+        window.removeEventListener("keyup", handleKeyUp);
+        window.removeEventListener("blur", handleWindowBlur);
+      };
+    }, [ isDraggingCanvas, setHandMode ]);
     reactExports.useEffect(() => {
       const handleKeyDown = e => {
         if (e.key === "Escape" && activeTool && activeTool !== InteractionMode.Select) {
@@ -69306,12 +69322,15 @@
           return matrix.clone().translate(worldFocal.x, worldFocal.y).scaleBy(zoomFactor, zoomFactor).translate(-worldFocal.x, -worldFocal.y);
         });
       } else {
-        let deltaX = 0, deltaY = 0;
-        if (e.shiftKey) deltaX = -e.deltaY * WHEEL_PAN_SPEED; else {
+        let deltaX = 0;
+        let deltaY = 0;
+        if (e.shiftKey) {
+          deltaX = -e.deltaY * WHEEL_PAN_SPEED;
+        } else {
           deltaY = -e.deltaY * WHEEL_PAN_SPEED;
           deltaX = -e.deltaX * WHEEL_PAN_SPEED;
         }
-        updateViewStateMatrix(activeSceneId, matrix => matrix.clone().translate(deltaX, deltaY));
+        updateViewStateMatrix(activeSceneId, matrix => matrix.clone().translate(deltaX / matrix.scale, deltaY / matrix.scale));
       }
     }, [ activeSceneId, updateViewStateMatrix ]);
     reactExports.useEffect(() => {
@@ -69344,7 +69363,7 @@
     };
     const handleContainerMouseUp = () => {
       if (isDraggingCanvas) {
-        setHandMode(false);
+        setHandMode(isSpacePressedRef.current);
         setIsDraggingCanvas(false);
         lastMousePos.current = null;
       }

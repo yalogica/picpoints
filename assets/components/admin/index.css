@@ -1138,6 +1138,10 @@
   max-height: 70vh;
 }
 
+.ppnts .max-h-\[90dvh\] {
+  max-height: 90dvh;
+}
+
 .ppnts .min-h-7 {
   min-height: calc(var(--spacing) * 7);
 }
