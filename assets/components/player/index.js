@@ -2,6 +2,11 @@
   typeof define === "function" && define.amd ? define(factory) : factory();
 })(function() {
   "use strict";
+  var SceneType$1;
+  (function(SceneType) {
+    SceneType["Group"] = "group";
+    SceneType["Object"] = "object";
+  })(SceneType$1 || (SceneType$1 = {}));
   function getDefaultExportFromCjs$1(x) {
     return x && x.__esModule && Object.prototype.hasOwnProperty.call(x, "default") ? x["default"] : x;
   }
@@ -13274,6 +13279,11 @@
       this.activeSceneView = null;
     }
   }
+  var SceneType;
+  (function(SceneType) {
+    SceneType["Group"] = "group";
+    SceneType["Object"] = "object";
+  })(SceneType || (SceneType = {}));
   class Matrix {
     m=[];
     constructor(a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0) {
@@ -20298,21 +20308,25 @@
       return this.activeSceneId ? this.scenes.get(this.activeSceneId) ?? null : null;
     }
     getList() {
-      return this.sceneOrder.map(id => this.scenes.get(id)).filter(Boolean);
+      return this.sceneOrder.map(id => this.scenes.get(id)).filter(scene => scene !== void 0);
     }
     getNext(loop = false) {
       if (!this.activeSceneId) return null;
-      const idx = this.sceneOrder.indexOf(this.activeSceneId);
-      const nextIdx = idx + 1;
-      if (nextIdx >= this.sceneOrder.length) return loop ? this.getList()[0] ?? null : null;
-      return this.scenes.get(this.sceneOrder[nextIdx]) ?? null;
+      const index = this.sceneOrder.indexOf(this.activeSceneId);
+      const nextIndex = index + 1;
+      if (nextIndex >= this.sceneOrder.length) {
+        return loop ? this.getList()[0] ?? null : null;
+      }
+      return this.scenes.get(this.sceneOrder[nextIndex]) ?? null;
     }
     getPrev(loop = false) {
       if (!this.activeSceneId) return null;
-      const idx = this.sceneOrder.indexOf(this.activeSceneId);
-      const prevIdx = idx - 1;
-      if (prevIdx < 0) return loop ? this.getList().at(-1) ?? null : null;
-      return this.scenes.get(this.sceneOrder[prevIdx]) ?? null;
+      const index = this.sceneOrder.indexOf(this.activeSceneId);
+      const previousIndex = index - 1;
+      if (previousIndex < 0) {
+        return loop ? this.getList().at(-1) ?? null : null;
+      }
+      return this.scenes.get(this.sceneOrder[previousIndex]) ?? null;
     }
     setDefault(sceneId) {
       this.defaultSceneId = sceneId;
@@ -20321,14 +20335,27 @@
       return this.defaultSceneId;
     }
     add(scene) {
-      if (this.scenes.has(scene.id)) return false;
-      this.scenes.set(scene.id, scene);
-      this.sceneOrder.push(scene.id);
-      const sceneView = new SceneView(scene, this.containerEl, this.emitter, this.mapApi);
-      this.sceneViews.set(scene.id, sceneView);
+      if (scene.type === SceneType.Group) {
+        let added = false;
+        for (const child of scene.children ?? []) {
+          added = this.add(child) || added;
+        }
+        return added;
+      }
+      if (this.scenes.has(scene.id)) {
+        return false;
+      }
+      const objectScene = {
+        ...scene,
+        type: SceneType.Object
+      };
+      this.scenes.set(objectScene.id, objectScene);
+      this.sceneOrder.push(objectScene.id);
+      const sceneView = new SceneView(objectScene, this.containerEl, this.emitter, this.mapApi);
+      this.sceneViews.set(objectScene.id, sceneView);
       this.containerEl.append(sceneView.getSceneContainer());
       this.emitter.emit("scene:add", {
-        sceneId: scene.id
+        sceneId: objectScene.id
       });
       return true;
     }
@@ -31196,8 +31223,9 @@
           component: controlWidget.component
         });
       });
-      if (this.config.scenes?.length) {
-        const startSceneId = this.config.initialSceneId && this.sceneApi.has(this.config.initialSceneId) ? this.config.initialSceneId : this.config.scenes[0].id;
+      const firstScene = this.sceneApi.getList()[0];
+      if (firstScene) {
+        const startSceneId = this.config.initialSceneId && this.sceneApi.has(this.config.initialSceneId) ? this.config.initialSceneId : firstScene.id;
         let isLoaded = false;
         const showStartScene = () => {
           if (isLoaded) return;
@@ -31276,6 +31304,12 @@
     return value || null;
   };
   const g = yalogica_picpoints_global;
+  const hasScene = (scenes, sceneId) => (scenes ?? []).some(scene => {
+    if (scene.type === SceneType$1.Group) {
+      return hasScene(scene.children, sceneId);
+    }
+    return scene.id === sceneId;
+  });
   const YalogicaPicPointsPlayer = {
     async init() {
       const playersEl = document.querySelectorAll(".picpoints-player");
@@ -31309,7 +31343,7 @@
           };
           const urlSceneId = getSceneIdFromHash();
           const sceneId = urlSceneId ?? playerEl.dataset.sceneId ?? config.initialSceneId;
-          if (sceneId && !config.scenes?.some(s => s.id === sceneId)) {
+          if (sceneId && !hasScene(config.scenes, sceneId)) {
             console.warn(`Scene "${sceneId}" not found in map "${mapId}", falling back to default scene`);
           }
           const api = InteractiveMapApiImpl.create(playerEl, sceneId ? {

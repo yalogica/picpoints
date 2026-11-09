@@ -13808,40 +13808,6 @@
     }
     return out;
   }
-  function collectSubtreeLayerIds(tree, selectedLayerIds) {
-    const result = new Set;
-    const selectedSet = new Set(selectedLayerIds);
-    const collectSubtree = node => {
-      result.add(node.id);
-      node.children.forEach(collectSubtree);
-    };
-    const traverse = node => {
-      if (selectedSet.has(node.id)) {
-        collectSubtree(node);
-        return;
-      }
-      node.children.forEach(traverse);
-    };
-    tree.forEach(traverse);
-    return Array.from(result);
-  }
-  function collectTopLevelLayerIds(tree, selectedLayerIds) {
-    const selectedSet = new Set(selectedLayerIds);
-    const result = [];
-    const stack = tree.map(node => [ node, false ]);
-    while (stack.length > 0) {
-      const [node, hasSelectedAncestor] = stack.pop();
-      const isSelected = selectedSet.has(node.id);
-      if (isSelected && !hasSelectedAncestor) {
-        result.push(node.id);
-        continue;
-      }
-      for (let i = node.children.length - 1; i >= 0; i--) {
-        stack.push([ node.children[i], hasSelectedAncestor || isSelected ]);
-      }
-    }
-    return result;
-  }
   const generatePaginationItems = (page, pages) => {
     const delta = 2;
     const range = [];
@@ -18345,6 +18311,11 @@
     InteractiveMapStatus["Draft"] = "draft";
     InteractiveMapStatus["Publish"] = "publish";
   })(InteractiveMapStatus$1 || (InteractiveMapStatus$1 = {}));
+  var SceneType$1;
+  (function(SceneType) {
+    SceneType["Group"] = "group";
+    SceneType["Object"] = "object";
+  })(SceneType$1 || (SceneType$1 = {}));
   var LayerType$1;
   (function(LayerType) {
     LayerType["Group"] = "group";
@@ -19829,63 +19800,163 @@
       this.commands.forEach(command => command.redo());
     }
   }
+  const rebuildIds$1 = draft => {
+    const ids = [];
+    const visited = new Set;
+    const traverse = (childIds, parentId) => {
+      for (const id of childIds) {
+        const scene = draft.scenes.entities[id];
+        if (!scene) {
+          throw new Error(`Scene "${id}" not found`);
+        }
+        if (visited.has(id)) {
+          throw new Error(`Duplicate or cyclic scene reference: "${id}"`);
+        }
+        if (scene.parentId !== parentId) {
+          throw new Error(`Invalid parent for scene "${id}"`);
+        }
+        visited.add(id);
+        ids.push(id);
+        if (scene.type === SceneType$1.Group) {
+          traverse(scene.childrenIds, id);
+        }
+      }
+    };
+    traverse(draft.scenes.rootIds);
+    if (visited.size !== Object.keys(draft.scenes.entities).length) {
+      throw new Error("Scene tree contains unreachable nodes");
+    }
+    draft.scenes.ids = ids;
+  };
   const useSceneStore = create$3((set, get) => ({
     scenes: {
       entities: {},
-      ids: []
+      ids: [],
+      rootIds: []
     },
     actions: {
-      size: () => get().scenes.ids.length,
+      size: () => {
+        const {entities: entities, ids: ids} = get().scenes;
+        return ids.reduce((count, id) => entities[id]?.type === SceneType$1.Object ? count + 1 : count, 0);
+      },
       get: id => {
         const {entities: entities} = get().scenes;
         return entities[id] ?? null;
       },
       add: (scene, pos) => {
-        const newId = scene?.id ?? generateId$1();
-        const newScene = {
+        const newId = scene.id ?? generateId$1();
+        if (scene.type === SceneType$1.Group && scene.childrenIds.length > 0) {
+          throw new Error("Add a scene group before adding its children");
+        }
+        const newScene = structuredClone({
           ...scene,
           id: newId
-        };
+        });
         set(produce(draft => {
+          if (draft.scenes.entities[newId]) {
+            throw new Error(`Scene "${newId}" already exists`);
+          }
+          let targetIds;
+          if (newScene.parentId !== void 0) {
+            const parent = draft.scenes.entities[newScene.parentId];
+            if (!parent || parent.type !== SceneType$1.Group) {
+              throw new Error(`Scene group "${newScene.parentId}" not found`);
+            }
+            targetIds = parent.childrenIds;
+          } else {
+            targetIds = draft.scenes.rootIds;
+          }
           draft.scenes.entities[newId] = newScene;
-          const ids = draft.scenes.ids;
-          const target = pos === void 0 ? ids.length : Math.min(Math.max(pos, 0), ids.length);
-          ids.splice(target, 0, newId);
+          const target = pos === void 0 ? targetIds.length : Math.min(Math.max(pos, 0), targetIds.length);
+          targetIds.splice(target, 0, newId);
+          rebuildIds$1(draft);
         }));
-        return newScene;
+        return get().scenes.entities[newId];
       },
       copy: (id, pos) => {
-        const scene = get().actions.get(id);
-        if (!scene) {
+        const {entities: entities} = get().scenes;
+        const source = entities[id];
+        if (!source) {
           throw new Error(`Scene "${id}" not found`);
         }
-        const newId = generateId$1();
-        const newScene = {
-          ...scene,
-          id: newId,
-          name: addCopyPostfix(scene.name)
-        };
+        let copiedId;
         set(produce(draft => {
-          draft.scenes.entities[newId] = newScene;
-          const ids = draft.scenes.ids;
-          let target;
-          if (pos !== void 0) {
-            target = Math.min(Math.max(pos, 0), ids.length);
+          let siblings;
+          if (source.parentId !== void 0) {
+            const parent = draft.scenes.entities[source.parentId];
+            if (!parent || parent.type !== SceneType$1.Group) {
+              throw new Error(`Scene group "${source.parentId}" not found`);
+            }
+            siblings = parent.childrenIds;
           } else {
-            const sourcePos = ids.indexOf(scene.id);
-            target = sourcePos === -1 ? ids.length : Math.min(sourcePos + 1, ids.length);
+            siblings = draft.scenes.rootIds;
           }
-          ids.splice(target, 0, newId);
+          const sourceIndex = siblings.indexOf(id);
+          if (sourceIndex === -1) {
+            throw new Error(`Scene "${id}" is missing from its container`);
+          }
+          const cloneNode = (sourceId, parentId, isRoot = false) => {
+            const original = entities[sourceId];
+            if (!original) {
+              throw new Error(`Scene "${sourceId}" not found`);
+            }
+            let newId = generateId$1();
+            while (draft.scenes.entities[newId]) {
+              newId = generateId$1();
+            }
+            const clone = {
+              ...structuredClone(original),
+              id: newId,
+              parentId: parentId,
+              name: isRoot ? addCopyPostfix(original.name) : original.name
+            };
+            if (clone.type === SceneType$1.Group) {
+              clone.childrenIds = [];
+            }
+            draft.scenes.entities[newId] = clone;
+            if (original.type === SceneType$1.Group) {
+              const childrenIds = original.childrenIds.map(childId => cloneNode(childId, newId));
+              const group = draft.scenes.entities[newId];
+              if (group.type === SceneType$1.Group) {
+                group.childrenIds = childrenIds;
+              }
+            }
+            return newId;
+          };
+          copiedId = cloneNode(id, source.parentId, true);
+          const target = pos === void 0 ? sourceIndex + 1 : Math.min(Math.max(pos, 0), siblings.length);
+          siblings.splice(target, 0, copiedId);
+          rebuildIds$1(draft);
         }));
-        return newScene;
+        if (copiedId === void 0) {
+          throw new Error(`Failed to copy scene "${id}"`);
+        }
+        return get().scenes.entities[copiedId];
       },
       remove: ids => {
-        const toRemove = Array.isArray(ids) ? ids : [ ids ];
         set(produce(draft => {
-          toRemove.forEach(id => {
+          const idsToRemove = new Set;
+          const collectSceneAndChildren = id => {
+            if (idsToRemove.has(id)) return;
+            const scene = draft.scenes.entities[id];
+            if (!scene) return;
+            idsToRemove.add(id);
+            if (scene.type === SceneType$1.Group) {
+              scene.childrenIds.forEach(collectSceneAndChildren);
+            }
+          };
+          ids.forEach(collectSceneAndChildren);
+          if (idsToRemove.size === 0) return;
+          idsToRemove.forEach(id => {
             delete draft.scenes.entities[id];
           });
-          draft.scenes.ids = draft.scenes.ids.filter(id => !toRemove.includes(id));
+          draft.scenes.rootIds = draft.scenes.rootIds.filter(id => !idsToRemove.has(id));
+          Object.values(draft.scenes.entities).forEach(scene => {
+            if (scene.type === SceneType$1.Group) {
+              scene.childrenIds = scene.childrenIds.filter(id => !idsToRemove.has(id));
+            }
+          });
+          rebuildIds$1(draft);
         }));
       },
       update: (id, updates) => {
@@ -19894,27 +19965,91 @@
           if (!scene) {
             throw new Error(`Scene "${id}" not found`);
           }
-          draft.scenes.entities[id] = {
-            ...scene,
-            ...updates
-          };
+          if ("id" in updates || "type" in updates || "parentId" in updates || "childrenIds" in updates) {
+            throw new Error("Cannot update scene identity or tree structure through update");
+          }
+          if (scene.type === SceneType$1.Group) {
+            if (Object.keys(updates).some(key => key !== "name" && key !== "collapsed")) {
+              throw new Error("Invalid scene group updates");
+            }
+            Object.assign(scene, updates);
+          } else {
+            if ("collapsed" in updates) {
+              throw new Error("Only scene groups can be collapsed");
+            }
+            Object.assign(scene, updates);
+          }
         }));
       },
-      move: (ids, pos) => {
+      move: (ids, parentId, pos) => {
         set(produce(draft => {
-          const currentIds = draft.scenes.ids;
-          const setIds = new Set(ids);
-          const movingIds = currentIds.filter(id => setIds.has(id));
+          const selected = new Set(ids);
+          const movingIds = draft.scenes.ids.filter(id => {
+            if (!selected.has(id)) return false;
+            const scene = draft.scenes.entities[id];
+            if (!scene) return false;
+            let ancestorId = scene.parentId;
+            while (ancestorId !== void 0) {
+              if (selected.has(ancestorId)) {
+                return false;
+              }
+              const ancestor = draft.scenes.entities[ancestorId];
+              if (!ancestor || ancestor.type !== SceneType$1.Group) {
+                throw new Error(`Scene group "${ancestorId}" not found`);
+              }
+              ancestorId = ancestor.parentId;
+            }
+            return true;
+          });
           if (movingIds.length === 0) return;
-          let nextIds = currentIds.filter(id => !setIds.has(id));
-          const target = Math.min(Math.max(pos, 0), nextIds.length);
-          nextIds = [ ...nextIds.slice(0, target), ...movingIds, ...nextIds.slice(target) ];
-          draft.scenes.ids = nextIds;
+          const movingSet = new Set(movingIds);
+          if (parentId !== null) {
+            const parent = draft.scenes.entities[parentId];
+            if (!parent || parent.type !== SceneType$1.Group) {
+              throw new Error(`Scene group "${parentId}" not found`);
+            }
+            let ancestorId = parentId;
+            while (ancestorId !== void 0) {
+              if (movingSet.has(ancestorId)) {
+                throw new Error("Cannot move a scene group into itself or its descendant");
+              }
+              const ancestor = draft.scenes.entities[ancestorId];
+              if (!ancestor || ancestor.type !== SceneType$1.Group) {
+                throw new Error(`Scene group "${ancestorId}" not found`);
+              }
+              ancestorId = ancestor.parentId;
+            }
+          }
+          draft.scenes.rootIds = draft.scenes.rootIds.filter(id => !movingSet.has(id));
+          Object.values(draft.scenes.entities).forEach(scene => {
+            if (scene.type === SceneType$1.Group) {
+              scene.childrenIds = scene.childrenIds.filter(id => !movingSet.has(id));
+            }
+          });
+          let targetIds;
+          if (parentId === null) {
+            targetIds = draft.scenes.rootIds;
+          } else {
+            const parent = draft.scenes.entities[parentId];
+            if (parent.type !== SceneType$1.Group) {
+              throw new Error(`Scene "${parentId}" is not a group`);
+            }
+            targetIds = parent.childrenIds;
+          }
+          const target = Math.min(Math.max(pos, 0), targetIds.length);
+          targetIds.splice(target, 0, ...movingIds);
+          movingIds.forEach(id => {
+            draft.scenes.entities[id].parentId = parentId ?? void 0;
+          });
+          rebuildIds$1(draft);
         }));
       },
-      restoreIds: ids => {
+      getScenesSnapshot: () => structuredClone(get().scenes),
+      applyScenesSnapshot: snapshot => {
+        const restored = structuredClone(snapshot);
         set(produce(draft => {
-          draft.scenes.ids = ids;
+          draft.scenes = restored;
+          rebuildIds$1(draft);
         }));
       }
     }
@@ -20462,6 +20597,12 @@
       scenes: {
         hasActive: () => get().activeSceneId !== null,
         setActive: id => {
+          if (id !== null) {
+            const scene = useSceneStore.getState().actions.get(id);
+            if (!scene || scene.type !== SceneType$1.Object) {
+              return;
+            }
+          }
           set(produce(draft => {
             if (draft.activeSceneId !== id) {
               clearLayersSelection(draft);
@@ -20476,18 +20617,16 @@
         },
         isSelected: id => get().selectedSceneIds.includes(id),
         setSelected: ids => {
+          const {entities: entities} = useSceneStore.getState().scenes;
+          const unique = [ ...new Set(ids) ].filter(id => entities[id] !== void 0);
           set(produce(draft => {
-            const unique = Array.from(new Set(ids));
             draft.selectedSceneIds = unique;
-            if (draft.activeSceneId && !unique.includes(draft.activeSceneId)) {
-              draft.activeSceneId = null;
+            draft.lastSelectedSceneId = unique.length > 0 ? unique[unique.length - 1] : null;
+            const nextActiveId = unique.length === 1 && entities[unique[0]].type === SceneType$1.Object ? unique[0] : null;
+            if (draft.activeSceneId !== nextActiveId) {
               clearLayersSelection(draft);
             }
-            if (unique.length > 0) {
-              draft.lastSelectedSceneId = unique[unique.length - 1];
-            } else {
-              draft.lastSelectedSceneId = null;
-            }
+            draft.activeSceneId = nextActiveId;
           }));
         },
         clearSelection: ids => {
@@ -20509,77 +20648,85 @@
           }));
         },
         toggleSelected: id => {
+          const {entities: entities} = useSceneStore.getState().scenes;
+          const scene = entities[id];
+          if (!scene) return;
           set(produce(draft => {
-            clearLayersSelection(draft);
             const selected = draft.selectedSceneIds;
-            const idx = selected.indexOf(id);
-            if (idx === -1) {
+            const index = selected.indexOf(id);
+            if (index === -1) {
               selected.push(id);
-              draft.activeSceneId = id;
               draft.lastSelectedSceneId = id;
             } else {
-              selected.splice(idx, 1);
-              if (draft.activeSceneId === id) {
-                draft.activeSceneId = null;
-              }
+              selected.splice(index, 1);
               if (draft.lastSelectedSceneId === id) {
                 draft.lastSelectedSceneId = selected.length > 0 ? selected[selected.length - 1] : null;
               }
             }
+            const nextActiveId = selected.length === 1 && entities[selected[0]]?.type === SceneType$1.Object ? selected[0] : null;
+            if (draft.activeSceneId !== nextActiveId) {
+              clearLayersSelection(draft);
+            }
+            draft.activeSceneId = nextActiveId;
           }));
         },
         selectOnly: id => {
+          const scene = useSceneStore.getState().actions.get(id);
+          if (!scene) return;
           set(produce(draft => {
-            if (draft.activeSceneId !== id) {
+            const nextActiveId = scene.type === SceneType$1.Object ? id : null;
+            if (draft.activeSceneId !== nextActiveId || scene.type === SceneType$1.Group) {
               clearLayersSelection(draft);
             }
-            draft.activeSceneId = id;
             draft.selectedSceneIds = [ id ];
             draft.lastSelectedSceneId = id;
+            draft.activeSceneId = nextActiveId;
           }));
         },
         selectWithModifiers: (ids, id, {ctrlKey: ctrlKey, shiftKey: shiftKey}) => {
-          const order = ids;
+          const {entities: entities} = useSceneStore.getState().scenes;
+          const scene = entities[id];
+          if (!scene) return;
+          const order = ids.filter(sceneId => entities[sceneId] !== void 0);
           set(produce(draft => {
             const selected = draft.selectedSceneIds;
-            const selectRange = (fromId, toId) => {
-              const fromIndex = order.indexOf(fromId);
-              const toIndex = order.indexOf(toId);
-              if (fromIndex === -1 || toIndex === -1) return;
-              const [start, end] = fromIndex < toIndex ? [ fromIndex, toIndex ] : [ toIndex, fromIndex ];
-              const rangeIds = order.slice(start, end + 1);
-              const set2 = new Set(selected);
-              rangeIds.forEach(rid => set2.add(rid));
-              draft.selectedSceneIds = Array.from(set2);
+            const normalizeActive = () => {
+              const selectedIds = draft.selectedSceneIds;
+              const nextActiveId = selectedIds.length === 1 && entities[selectedIds[0]]?.type === SceneType$1.Object ? selectedIds[0] : null;
+              if (draft.activeSceneId !== nextActiveId) {
+                clearLayersSelection(draft);
+              }
+              draft.activeSceneId = nextActiveId;
             };
-            if (shiftKey && draft.lastSelectedSceneId) {
-              selectRange(draft.lastSelectedSceneId, id);
-              draft.lastSelectedSceneId = id;
-              return;
+            if (shiftKey && draft.lastSelectedSceneId !== null) {
+              const fromIndex = order.indexOf(draft.lastSelectedSceneId);
+              const toIndex = order.indexOf(id);
+              if (fromIndex !== -1 && toIndex !== -1) {
+                const start = Math.min(fromIndex, toIndex);
+                const end = Math.max(fromIndex, toIndex);
+                draft.selectedSceneIds = [ ...new Set([ ...selected, ...order.slice(start, end + 1) ]) ];
+                draft.lastSelectedSceneId = id;
+                normalizeActive();
+                return;
+              }
             }
             if (ctrlKey) {
-              const idx = selected.indexOf(id);
-              if (idx === -1) {
+              const index = selected.indexOf(id);
+              if (index === -1) {
                 selected.push(id);
                 draft.lastSelectedSceneId = id;
               } else {
-                selected.splice(idx, 1);
-                if (draft.activeSceneId === id) {
-                  draft.activeSceneId = null;
-                  clearLayersSelection(draft);
-                }
+                selected.splice(index, 1);
                 if (draft.lastSelectedSceneId === id) {
                   draft.lastSelectedSceneId = selected.length > 0 ? selected[selected.length - 1] : null;
                 }
               }
+              normalizeActive();
               return;
             }
-            if (draft.activeSceneId !== id) {
-              clearLayersSelection(draft);
-            }
             draft.selectedSceneIds = [ id ];
-            draft.activeSceneId = id;
             draft.lastSelectedSceneId = id;
+            normalizeActive();
           }));
         },
         getViewState: id => {
@@ -20822,11 +20969,20 @@
     constructor(scene, pos) {
       const sceneStore = useSceneStore.getState();
       const layoutStore = useLayoutStore.getState();
-      const uiSnapshot = layoutStore.actions.getUISnapshot();
+      let siblings;
+      if (scene.parentId !== void 0) {
+        const parent = sceneStore.actions.get(scene.parentId);
+        if (!parent || parent.type !== SceneType$1.Group) {
+          throw new Error(`Scene group "${scene.parentId}" not found`);
+        }
+        siblings = parent.childrenIds;
+      } else {
+        siblings = sceneStore.scenes.rootIds;
+      }
       this.state = {
         scene: structuredClone(scene),
-        pos: pos ?? sceneStore.scenes.ids.length,
-        uiSnapshot: uiSnapshot
+        pos: pos ?? siblings.length,
+        uiSnapshot: layoutStore.actions.getUISnapshot()
       };
     }
     execute() {
@@ -20841,8 +20997,8 @@
     doAdd() {
       const sceneStore = useSceneStore.getState();
       const layoutStore = useLayoutStore.getState();
-      sceneStore.actions.add(this.state.scene, this.state.pos);
-      layoutStore.actions.scenes.selectOnly(this.state.scene.id);
+      const scene = sceneStore.actions.add(this.state.scene, this.state.pos);
+      layoutStore.actions.scenes.selectOnly(scene.id);
       layoutStore.setDirty(true);
     }
     doUndo() {
@@ -21419,23 +21575,32 @@
   }));
   class CommandSceneRemove {
     type="scene:remove";
-    states=[];
-    uiSnapshot;
+    state;
     constructor(sceneIds) {
       const sceneStore = useSceneStore.getState();
       const layerStore = useLayerStore.getState();
       const layoutStore = useLayoutStore.getState();
-      this.uiSnapshot = layoutStore.actions.getUISnapshot();
-      sceneIds.forEach(sceneId => {
-        const scene = sceneStore.actions.get(sceneId);
-        if (!scene) throw new Error(`Scene "${sceneId}" not found`);
-        const layersSnapshot = layerStore.actions.getSceneLayersSnapshot(sceneId);
-        this.states.push({
-          scene: structuredClone(scene),
-          pos: sceneStore.scenes.ids.indexOf(sceneId),
-          layersSnapshot: layersSnapshot
-        });
-      });
+      const idsToRemove = new Set;
+      const collectSceneAndChildren = id => {
+        if (idsToRemove.has(id)) return;
+        const scene = sceneStore.actions.get(id);
+        if (!scene) {
+          throw new Error(`Scene "${id}" not found`);
+        }
+        idsToRemove.add(id);
+        if (scene.type === SceneType$1.Group) {
+          scene.childrenIds.forEach(collectSceneAndChildren);
+        }
+      };
+      sceneIds.forEach(collectSceneAndChildren);
+      const orderedIds = sceneStore.scenes.ids.filter(id => idsToRemove.has(id));
+      const layersSnapshots = orderedIds.filter(id => sceneStore.scenes.entities[id].type === SceneType$1.Object).map(id => layerStore.actions.getSceneLayersSnapshot(id));
+      this.state = {
+        sceneIds: orderedIds,
+        scenesSnapshot: sceneStore.actions.getScenesSnapshot(),
+        layersSnapshots: layersSnapshots,
+        uiSnapshot: layoutStore.actions.getUISnapshot()
+      };
     }
     execute() {
       this.doRemove();
@@ -21450,23 +21615,24 @@
       const sceneStore = useSceneStore.getState();
       const layerStore = useLayerStore.getState();
       const layoutStore = useLayoutStore.getState();
-      const layerIds = this.states.flatMap(state => state.layersSnapshot.ids);
-      const sceneIds = this.states.map(state => state.scene.id);
-      layerStore.actions.remove(layerIds);
-      sceneStore.actions.remove(sceneIds);
+      const layerIds = this.state.layersSnapshots.flatMap(snapshot => snapshot.ids);
+      if (layerIds.length > 0) {
+        layerStore.actions.remove(layerIds);
+      }
+      sceneStore.actions.remove(this.state.sceneIds);
       layoutStore.actions.scenes.clearSelection();
-      layoutStore.actions.scenes.removeViewStates(sceneIds);
+      layoutStore.actions.scenes.removeViewStates(this.state.sceneIds);
       layoutStore.setDirty(true);
     }
     doUndo() {
       const sceneStore = useSceneStore.getState();
       const layerStore = useLayerStore.getState();
       const layoutStore = useLayoutStore.getState();
-      this.states.forEach(state => {
-        sceneStore.actions.add(state.scene, state.pos);
-        layerStore.actions.applyLayersSnapshot(state.layersSnapshot);
-      });
-      layoutStore.actions.applyUISnapshot(this.uiSnapshot);
+      sceneStore.actions.applyScenesSnapshot(this.state.scenesSnapshot);
+      for (const snapshot of this.state.layersSnapshots) {
+        layerStore.actions.applyLayersSnapshot(structuredClone(snapshot));
+      }
+      layoutStore.actions.applyUISnapshot(this.state.uiSnapshot);
       layoutStore.setDirty(true);
     }
   }
@@ -21476,17 +21642,14 @@
     constructor(sceneId, updates) {
       const sceneStore = useSceneStore.getState();
       const scene = sceneStore.actions.get(sceneId);
-      if (!scene) throw new Error(`Scene "${sceneId}" not found`);
-      const oldValues = Object.fromEntries(Object.keys(updates).map(key => {
-        const value = scene[key];
-        return [ key, key === "object" && value ? structuredClone(value) : value ];
-      }));
+      if (!scene) {
+        throw new Error(`Scene "${sceneId}" not found`);
+      }
+      const oldValues = Object.fromEntries(Object.keys(updates).map(key => [ key, Reflect.get(scene, key) ]));
       this.state = {
         sceneId: sceneId,
-        oldValues: oldValues,
-        newValues: {
-          ...updates
-        }
+        oldValues: structuredClone(oldValues),
+        newValues: structuredClone(updates)
       };
     }
     execute() {
@@ -21501,19 +21664,20 @@
     doUpdate(values) {
       const sceneStore = useSceneStore.getState();
       const layoutStore = useLayoutStore.getState();
-      sceneStore.actions.update(this.state.sceneId, values);
+      sceneStore.actions.update(this.state.sceneId, structuredClone(values));
       layoutStore.setDirty(true);
     }
   }
   class CommandSceneMove {
     type="scene:move";
     state;
-    constructor(ids, pos) {
+    constructor(ids, parentId, pos) {
       const sceneStore = useSceneStore.getState();
       this.state = {
         ids: [ ...ids ],
+        parentId: parentId,
         pos: pos,
-        idsSnapshot: [ ...sceneStore.scenes.ids ]
+        scenesSnapshot: sceneStore.actions.getScenesSnapshot()
       };
     }
     execute() {
@@ -21528,13 +21692,13 @@
     doMove() {
       const sceneStore = useSceneStore.getState();
       const layoutStore = useLayoutStore.getState();
-      sceneStore.actions.move(this.state.ids, this.state.pos);
+      sceneStore.actions.move(this.state.ids, this.state.parentId, this.state.pos);
       layoutStore.setDirty(true);
     }
     doRestore() {
       const sceneStore = useSceneStore.getState();
       const layoutStore = useLayoutStore.getState();
-      sceneStore.actions.restoreIds(this.state.idsSnapshot);
+      sceneStore.actions.applyScenesSnapshot(this.state.scenesSnapshot);
       layoutStore.setDirty(true);
     }
   }
@@ -24828,7 +24992,7 @@
                 children: "Lifetime"
               }), jsxRuntimeExports.jsx("span", {
                 className: "mt-1 block text-base font-bold text-gray-900",
-                children: "$119 one-time"
+                children: "$99 one-time"
               }), jsxRuntimeExports.jsx("span", {
                 className: "mt-1 block text-xs text-muted-foreground",
                 children: "Pay once, keep PRO forever"
@@ -24889,31 +25053,15 @@
     return {
       actions: {
         scenes: {
-          add: () => {
+          add: (scene, pos) => {
             const sceneStore = useSceneStore.getState();
-            if (sceneStore.scenes.ids.length >= LITE_MAX_SCENES) {
+            if (scene.type === SceneType$1.Object && sceneStore.actions.size() >= LITE_MAX_SCENES) {
               showUpgradeProDialog({
-                featureText: `The Lite version allows up to ${LITE_MAX_SCENES} scenes.`
+                featureText: `The Lite version allows up to ${LITE_MAX_SCENES} scenes in total.`
               });
               return;
             }
-            const newScene = {
-              id: generateId$1(),
-              name: `Scene ${sceneStore.actions.size() + 1}`,
-              background: {
-                enabled: true,
-                color: "#f1f1f1"
-              },
-              canvas: {
-                width: 800,
-                height: 600,
-                background: {
-                  enabled: true,
-                  color: "#fff"
-                }
-              }
-            };
-            commandManager.execute(new CommandSceneAdd(newScene));
+            commandManager.execute(new CommandSceneAdd(scene, pos));
           },
           remove: ids => {
             const sceneStore = useSceneStore.getState();
@@ -24931,8 +25079,9 @@
               commandManager.execute(new CommandBatch(commands));
             }
           },
-          move: (ids, pos) => {
-            commandManager.execute(new CommandSceneMove(ids, pos));
+          move: (ids, parentId, pos) => {
+            if (ids.length === 0) return;
+            commandManager.execute(new CommandSceneMove(ids, parentId, pos));
           }
         },
         layers: {
@@ -25096,6 +25245,9 @@
               const {layers: parsedLayers, bounds: svgBounds} = parseSvgToLayers(svgText, sceneId);
               if (parsedLayers.length === 0) return;
               const scene = useSceneStore.getState().actions.get(sceneId);
+              if (!scene || scene.type !== SceneType$1.Object) {
+                return;
+              }
               const rawWidth = scene?.canvas?.width;
               const rawHeight = scene?.canvas?.height;
               let canvasWidth;
@@ -25238,6 +25390,7 @@
               },
               scenes: [ {
                 id: generateId$1(),
+                type: SceneType$1.Object,
                 name: "Scene 1",
                 background: {
                   enabled: true,
@@ -25325,9 +25478,10 @@
             Service.interactiveMap.setConfig(interactiveMapConfig);
             const layout = useLayoutStore.getState();
             layout.setDirty(json.data.item.status === InteractiveMapStatus$1.AutoDraft);
-            if (interactiveMapConfig.scenes?.length) {
-              layout.actions.scenes.setActive(interactiveMapConfig.scenes[0].id);
-            }
+            const {scenes: scenes} = useSceneStore.getState();
+            const firstSceneId = scenes.ids.find(id => scenes.entities[id]?.type === SceneType$1.Object);
+            layout.actions.scenes.clearSelection();
+            layout.actions.scenes.setActive(firstSceneId ?? null);
           } catch (error) {
             toast.warning(error instanceof Error ? error.message : "Unknown error occurred");
             console.error(error);
@@ -25481,13 +25635,33 @@
               }
             }
           };
-          for (const scene of interactiveMapConfig.scenes) {
-            const {layers: sceneLayers, ...sceneData} = scene;
-            sceneStore.actions.add(sceneData);
-            if (sceneLayers?.length) {
-              deserializeLayers(sceneLayers, scene.id);
-            }
-          }
+          const deserializeScenes = (scenes, parentId) => {
+            scenes.forEach((scene, index) => {
+              if (scene.type === SceneType$1.Group) {
+                const {children: children, ...groupData} = scene;
+                sceneStore.actions.add({
+                  ...groupData,
+                  type: SceneType$1.Group,
+                  parentId: parentId,
+                  childrenIds: []
+                }, index);
+                if (children?.length) {
+                  deserializeScenes(children, scene.id);
+                }
+              } else {
+                const {layers: sceneLayers, ...sceneData} = scene;
+                sceneStore.actions.add({
+                  ...sceneData,
+                  type: SceneType$1.Object,
+                  parentId: parentId
+                }, index);
+                if (sceneLayers?.length) {
+                  deserializeLayers(sceneLayers, scene.id);
+                }
+              }
+            });
+          };
+          deserializeScenes(interactiveMapConfig.scenes);
         },
         getConfig: () => {
           const appStore = useAppStore.getState();
@@ -25528,20 +25702,35 @@
             }
             return result;
           };
-          const scenes = sceneStore.scenes.ids.map(sceneId => {
+          const buildSceneTree = sceneIds => sceneIds.map(sceneId => {
             const scene = sceneStore.scenes.entities[sceneId];
+            if (!scene) {
+              throw new Error(`Scene "${sceneId}" not found`);
+            }
+            if (scene.type === SceneType$1.Group) {
+              const {parentId: _parentId2, childrenIds: childrenIds, ...rest2} = scene;
+              const children = buildSceneTree(childrenIds);
+              return {
+                ...rest2,
+                ...children.length > 0 && {
+                  children: children
+                }
+              };
+            }
+            const {parentId: _parentId, ...rest} = scene;
             const rootLayerIds = layerStore.layers.rootIds.filter(layerId => {
               const layer = layerStore.layers.entities[layerId];
               return layer?.sceneId === sceneId;
             });
             const layers = buildLayerTree(rootLayerIds);
             return {
-              ...scene,
+              ...rest,
               ...layers.length > 0 && {
                 layers: layers
               }
             };
           });
+          const scenes = buildSceneTree(sceneStore.scenes.rootIds);
           return cleanObject({
             ...baseConfig,
             scenes: scenes,
@@ -35278,6 +35467,22 @@
     let {data: {value: b}} = _ref4;
     return b - a;
   }
+  function cornersOfRectangle(_ref5) {
+    let {left: left, top: top, height: height, width: width} = _ref5;
+    return [ {
+      x: left,
+      y: top
+    }, {
+      x: left + width,
+      y: top
+    }, {
+      x: left,
+      y: top + height
+    }, {
+      x: left + width,
+      y: top + height
+    } ];
+  }
   function getFirstCollision(collisions, property) {
     if (!collisions || collisions.length === 0) {
       return null;
@@ -35353,6 +35558,34 @@
       }
     }
     return collisions.sort(sortCollisionsDesc);
+  };
+  function isPointWithinRect(point, rect) {
+    const {top: top, left: left, bottom: bottom, right: right} = rect;
+    return top <= point.y && point.y <= bottom && left <= point.x && point.x <= right;
+  }
+  const pointerWithin = _ref => {
+    let {droppableContainers: droppableContainers, droppableRects: droppableRects, pointerCoordinates: pointerCoordinates} = _ref;
+    if (!pointerCoordinates) {
+      return [];
+    }
+    const collisions = [];
+    for (const droppableContainer of droppableContainers) {
+      const {id: id} = droppableContainer;
+      const rect = droppableRects.get(id);
+      if (rect && isPointWithinRect(pointerCoordinates, rect)) {
+        const corners = cornersOfRectangle(rect);
+        const distances = corners.reduce((accumulator, corner) => accumulator + distanceBetween(pointerCoordinates, corner), 0);
+        const effectiveDistance = Number((distances / 4).toFixed(4));
+        collisions.push({
+          id: id,
+          data: {
+            droppableContainer: droppableContainer,
+            value: effectiveDistance
+          }
+        });
+      }
+    }
+    return collisions.sort(sortCollisionsAsc);
   };
   function adjustScale(transform, rect1, rect2) {
     return {
@@ -38094,11 +38327,109 @@
       handleBlur: commitValue
     };
   }
+  const sceneSelectors = {
+    getScenesTree: () => state => {
+      const {entities: entities, rootIds: rootIds} = state.scenes;
+      const buildTree = ids => ids.map(id => {
+        const scene = entities[id];
+        if (!scene) {
+          throw new Error(`Scene "${id}" not found`);
+        }
+        return {
+          id: id,
+          type: scene.type,
+          children: scene.type === SceneType$1.Group ? buildTree(scene.childrenIds) : []
+        };
+      });
+      return buildTree(rootIds);
+    },
+    getFlattenScenes: opts => {
+      const includeCollapsedChildren = opts?.includeCollapsedChildren ?? false;
+      return state => {
+        const {entities: entities, rootIds: rootIds} = state.scenes;
+        const result = [];
+        const flatten = (ids, depth = 0, parentId) => {
+          for (const id of ids) {
+            const scene = entities[id];
+            if (!scene) {
+              throw new Error(`Scene "${id}" not found`);
+            }
+            result.push({
+              id: id,
+              depth: depth,
+              parentId: parentId
+            });
+            if (scene.type === SceneType$1.Group && (includeCollapsedChildren || !scene.collapsed)) {
+              flatten(scene.childrenIds, depth + 1, id);
+            }
+          }
+        };
+        flatten(rootIds);
+        return result;
+      };
+    }
+  };
+  const useScenes = () => {
+    const scenes = useSceneStore(state => state.scenes);
+    const {scenesTree: scenesTree, flattenScenes: flattenScenes, flattenAllScenes: flattenAllScenes} = reactExports.useMemo(() => {
+      const state = {
+        ...useSceneStore.getState(),
+        scenes: scenes
+      };
+      return {
+        scenesTree: sceneSelectors.getScenesTree()(state),
+        flattenScenes: sceneSelectors.getFlattenScenes()(state),
+        flattenAllScenes: sceneSelectors.getFlattenScenes({
+          includeCollapsedChildren: true
+        })(state)
+      };
+    }, [ scenes ]);
+    return {
+      sceneEntities: scenes.entities,
+      scenesCount: scenes.ids.length,
+      hasScenes: scenes.ids.length > 0,
+      scenesTree: scenesTree,
+      flattenScenes: flattenScenes,
+      flattenAllScenes: flattenAllScenes
+    };
+  };
   const ScenesToolbar = () => {
-    const selectedSceneIds = useLayoutStore(s => s.selectedSceneIds);
-    const selectedScenesCount = useLayoutStore(s => s.selectedSceneIds.length);
+    const selectedSceneIds = useLayoutStore(state => state.selectedSceneIds);
+    const selectedScenesCount = selectedSceneIds.length;
     const addNewScene = () => {
-      Service.actions.scenes.add();
+      const scene = {
+        id: generateId$1(),
+        type: SceneType$1.Object,
+        name: `Scene ${useSceneStore.getState().actions.size() + 1}`,
+        background: {
+          enabled: true,
+          color: "#f1f1f1"
+        },
+        canvas: {
+          width: 800,
+          height: 600,
+          background: {
+            enabled: true,
+            color: "#fff"
+          }
+        }
+      };
+      Service.actions.scenes.add(scene);
+    };
+    const addNewGroup = () => {
+      const sceneStore = useSceneStore.getState();
+      const {selectedSceneIds: selectedSceneIds2} = useLayoutStore.getState();
+      const selectedScene = selectedSceneIds2.length === 1 ? sceneStore.actions.get(selectedSceneIds2[0]) : null;
+      const parentId = selectedScene?.type === SceneType$1.Group ? selectedScene.id : void 0;
+      const group = {
+        id: generateId$1(),
+        type: SceneType$1.Group,
+        parentId: parentId,
+        name: "Group",
+        childrenIds: [],
+        collapsed: false
+      };
+      Service.actions.scenes.add(group, 0);
     };
     const removeScenes = () => {
       Service.actions.scenes.remove(selectedSceneIds);
@@ -38130,7 +38461,21 @@
               })
             })
           }), jsxRuntimeExports.jsx(TooltipContent, {
-            children: "Delete selected scenes"
+            children: "Delete selected scenes and groups"
+          }) ]
+        }), jsxRuntimeExports.jsxs(Tooltip, {
+          children: [ jsxRuntimeExports.jsx(TooltipTrigger, {
+            asChild: true,
+            children: jsxRuntimeExports.jsx(Button$1, {
+              variant: "ghost",
+              size: "tiny",
+              onClick: addNewGroup,
+              children: jsxRuntimeExports.jsx(Icons.FolderPlus, {
+                size: 16
+              })
+            })
+          }), jsxRuntimeExports.jsx(TooltipContent, {
+            children: "Add new group"
           }) ]
         }), jsxRuntimeExports.jsxs(Tooltip, {
           children: [ jsxRuntimeExports.jsx(TooltipTrigger, {
@@ -38150,8 +38495,11 @@
       }) ]
     });
   };
-  const DropIndicator$2 = ({className: className}) => jsxRuntimeExports.jsx("div", {
+  const DropIndicator$2 = ({depth: depth = 0, className: className}) => jsxRuntimeExports.jsx("div", {
     className: cn("absolute left-0 right-0 h-0.5 bg-primary rounded-full z-50", className),
+    style: {
+      marginLeft: `${depth}rem`
+    },
     children: jsxRuntimeExports.jsx("div", {
       className: "absolute top-[50%] left-0 h-2 w-2 translate-y-[-50%] rounded-full border-2 bg-primary-foreground border-primary"
     })
@@ -38166,15 +38514,25 @@
       children: "Item(s)"
     }) ]
   });
-  const SceneRow = ({scene: scene, dragOverInfo: dragOverInfo, onClick: onClick}) => {
-    const initialSceneId = useAppStore(s => s.interactiveMap.config.initialSceneId);
-    const activeSceneId = useLayoutStore(s => s.activeSceneId);
-    const selectedSceneIds = useLayoutStore(s => s.selectedSceneIds);
-    const {setNodeRef: setNodeRef, attributes: attributes, listeners: listeners} = useSortable({
-      id: scene.id
-    });
+  const SceneIcon = ({scene: scene}) => {
+    if (scene.type === SceneType$1.Group) {
+      if (scene.childrenIds.length === 0) {
+        return jsxRuntimeExports.jsx(Icons.Folder, {});
+      }
+      return scene.collapsed ? jsxRuntimeExports.jsx(Icons.FolderPlus, {}) : jsxRuntimeExports.jsx(Icons.FolderMinus, {});
+    }
+    return jsxRuntimeExports.jsx(Icons.Scene, {});
+  };
+  const SceneRow = ({scene: scene, depth: depth = 0, dragOverInfo: dragOverInfo, onClick: onClick}) => {
+    const initialSceneId = useAppStore(state => state.interactiveMap.config.initialSceneId);
+    const activeSceneId = useLayoutStore(state => state.activeSceneId);
+    const selectedSceneIds = useLayoutStore(state => state.selectedSceneIds);
     const [isEditing, setIsEditing] = reactExports.useState(false);
     const inputRef = reactExports.useRef(null);
+    const {setNodeRef: setNodeRef, attributes: attributes, listeners: listeners} = useSortable({
+      id: scene.id,
+      disabled: isEditing
+    });
     const commitSceneName = reactExports.useCallback(name => {
       Service.actions.scenes.update([ {
         id: scene.id,
@@ -38185,7 +38543,7 @@
     }, [ scene.id ]);
     const {localValue: localValue, setLocalValue: setLocalValue, handleBlur: handleBlur} = useEditableValue({
       storeValue: scene.name,
-      format: v => v ?? "",
+      format: value => value ?? "",
       parse: raw => {
         const trimmed = raw.trim();
         return trimmed === "" ? void 0 : trimmed;
@@ -38198,47 +38556,74 @@
         inputRef.current?.select();
       }
     }, [ isEditing ]);
-    const handleStartEditing = reactExports.useCallback(e => {
-      e.stopPropagation();
+    const handleStartEditing = reactExports.useCallback(event => {
+      event.stopPropagation();
       setIsEditing(true);
     }, []);
-    const handleEditingKeyDown = reactExports.useCallback(e => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        e.currentTarget.blur();
-      } else if (e.key === "Escape") {
-        e.preventDefault();
+    const handleEditingKeyDown = reactExports.useCallback(event => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        event.currentTarget.blur();
+      } else if (event.key === "Escape") {
+        event.preventDefault();
         setLocalValue(scene.name ?? "");
-        e.currentTarget.blur();
+        event.currentTarget.blur();
       }
     }, [ scene.name, setLocalValue ]);
-    const isActive = activeSceneId === scene.id;
+    const handleToggleCollapsed = event => {
+      event.stopPropagation();
+      if (scene.type !== SceneType$1.Group) return;
+      Service.actions.scenes.update([ {
+        id: scene.id,
+        updates: {
+          collapsed: !scene.collapsed
+        }
+      } ]);
+    };
+    const isGroup = scene.type === SceneType$1.Group;
+    const isActive = scene.type === SceneType$1.Object && activeSceneId === scene.id;
     const isSelected = selectedSceneIds.includes(scene.id);
     const isTarget = dragOverInfo?.id === scene.id;
-    const dropPosition = isTarget ? dragOverInfo?.position : null;
+    const dropPosition = isTarget ? dragOverInfo.position : null;
     return jsxRuntimeExports.jsxs("div", {
       id: `scene-${scene.id}`,
       className: "relative",
       children: [ dropPosition === DragPosition.Before && jsxRuntimeExports.jsx(DropIndicator$2, {
+        depth: depth,
         className: "top-0"
       }), jsxRuntimeExports.jsxs("div", {
         ref: setNodeRef,
-        className: cn("group relative overflow-hidden select-none flex items-center gap-1 px-2 py-1.5 whitespace-nowrap rounded-sm text-sm font-medium text-foreground/80 cursor-pointer box-border border-2 border-transparent hover:bg-primary/20", "[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-primary [&_svg]:fill-primary/30", isActive && "bg-primary text-primary-foreground [&_svg]:text-primary-foreground hover:bg-primary hover:text-primary-foreground", isSelected && !isActive && "bg-primary/20", dropPosition === DragPosition.Inside && "border-primary"),
+        className: cn("group relative overflow-hidden select-none flex items-center gap-1 px-2 py-1.5 whitespace-nowrap rounded-sm text-sm font-medium text-foreground/80 cursor-pointer box-border border-2 border-transparent hover:bg-primary/20", "[&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-primary [&_svg]:fill-primary/30", isSelected && "bg-primary/20", isActive && "before:content-[''] before:absolute before:top-0.5 before:bottom-0.5 before:left-0.5 before:w-1 before:rounded before:bg-primary", isGroup && dropPosition === DragPosition.Inside && "border-primary"),
         style: {
-          height: `${ROW_HEIGHT}px`
+          height: `${ROW_HEIGHT}px`,
+          paddingLeft: `calc(0.5rem + ${depth}rem)`
         },
         onClick: onClick,
         ...attributes,
         ...listeners,
-        children: [ jsxRuntimeExports.jsx(Icons.Scene, {}), isEditing ? jsxRuntimeExports.jsx("div", {
+        children: [ scene.type === SceneType$1.Group ? jsxRuntimeExports.jsx("button", {
+          type: "button",
+          className: "flex shrink-0 items-center justify-center",
+          "aria-label": scene.collapsed ? "Expand group" : "Collapse group",
+          "aria-expanded": !scene.collapsed,
+          onPointerDown: event => event.stopPropagation(),
+          onKeyDown: event => event.stopPropagation(),
+          onClick: handleToggleCollapsed,
+          onDoubleClick: event => event.stopPropagation(),
+          children: jsxRuntimeExports.jsx(SceneIcon, {
+            scene: scene
+          })
+        }) : jsxRuntimeExports.jsx(SceneIcon, {
+          scene: scene
+        }), isEditing ? jsxRuntimeExports.jsx("div", {
           className: "flex-1 min-w-0",
-          onPointerDown: e => e.stopPropagation(),
-          onClick: e => e.stopPropagation(),
-          onDoubleClick: e => e.stopPropagation(),
+          onPointerDown: event => event.stopPropagation(),
+          onClick: event => event.stopPropagation(),
+          onDoubleClick: event => event.stopPropagation(),
           children: jsxRuntimeExports.jsx("input", {
             ref: inputRef,
             value: localValue,
-            onChange: e => setLocalValue(e.target.value),
+            onChange: event => setLocalValue(event.target.value),
             onBlur: () => {
               handleBlur();
               setIsEditing(false);
@@ -38250,7 +38635,7 @@
           className: "truncate flex-1",
           onDoubleClick: handleStartEditing,
           children: scene.name
-        }), jsxRuntimeExports.jsxs("div", {
+        }), scene.type === SceneType$1.Object && jsxRuntimeExports.jsxs("div", {
           className: "flex gap-1 items-center",
           children: [ initialSceneId === scene.id && jsxRuntimeExports.jsx(Icons.Star, {
             size: 16,
@@ -38260,198 +38645,289 @@
           }) ]
         }) ]
       }), dropPosition === DragPosition.After && jsxRuntimeExports.jsx(DropIndicator$2, {
+        depth: depth,
         className: "bottom-0"
       }) ]
     });
   };
+  const SCENES_ROOT_DROP_ID = "scene-tree-root-drop-zone";
+  const ScenesRootDropZone = ({children: children, highlighted: highlighted}) => {
+    const {setNodeRef: setNodeRef} = useDroppable({
+      id: SCENES_ROOT_DROP_ID
+    });
+    return jsxRuntimeExports.jsx("div", {
+      ref: setNodeRef,
+      className: cn("relative h-full min-h-0 overflow-hidden inner-shadow", highlighted && "ring-2 ring-inset ring-primary"),
+      children: children
+    });
+  };
   const ScenesList = () => {
-    const {ids: sceneIds, entities: sceneEntities} = useSceneStore(s => s.scenes);
-    const scenes = reactExports.useMemo(() => sceneIds.map(id => sceneEntities[id]), [ sceneIds, sceneEntities ]);
-    const selectedSceneIds = useLayoutStore(s => s.selectedSceneIds);
-    const selectSceneWithModifiers = useLayoutStore(s => s.actions.scenes.selectWithModifiers);
-    const isSceneSelected = useLayoutStore(s => s.actions.scenes.isSelected);
-    const clearLayersSelection = useLayoutStore(s => s.actions.layers.clearSelection);
+    const {sceneEntities: sceneEntities, flattenScenes: flattenScenes} = useScenes();
+    const selectSceneWithModifiers = useLayoutStore(state => state.actions.scenes.selectWithModifiers);
+    const clearLayersSelection = useLayoutStore(state => state.actions.layers.clearSelection);
+    const visibleSceneIds = reactExports.useMemo(() => flattenScenes.map(scene => scene.id), [ flattenScenes ]);
     const sensors = useSensors(useSensor(PointerSensor, {
       activationConstraint: {
         distance: 5
       }
     }));
-    const {setNodeRef: setRootNodeRef, isOver: isOverRoot} = useDroppable({
-      id: "ROOT",
-      disabled: false
-    });
-    const [draggedSceneIds, setDraggedSceneIds] = reactExports.useState([]);
     const [dragCount, setDragCount] = reactExports.useState(0);
     const [dragPosition, setDragPosition] = reactExports.useState(null);
     const [dragOverInfo, setDragOverInfo] = reactExports.useState(null);
-    const lastDragOverInfo = reactExports.useRef(null);
-    const visibleSceneIds = reactExports.useMemo(() => scenes.filter(m => !draggedSceneIds.includes(m.id)).map(m => m.id), [ scenes, draggedSceneIds ]);
-    const visibleScenes = reactExports.useMemo(() => scenes.filter(m => !draggedSceneIds.includes(m.id)), [ scenes, draggedSceneIds ]);
-    const setLastDragOverInfo = dragOverInfo2 => {
-      const current = lastDragOverInfo.current;
-      if (!current && !dragOverInfo2) return;
-      if (current && dragOverInfo2 && current.id === dragOverInfo2.id && current.position === dragOverInfo2.position) {
-        return;
+    const movingIdsRef = reactExports.useRef([]);
+    const blockedIdsRef = reactExports.useRef(new Set);
+    const pointerRef = reactExports.useRef(null);
+    const collisionDetection = args => {
+      pointerRef.current = args.pointerCoordinates;
+      const collisions = pointerWithin(args);
+      const rowCollisions = collisions.filter(collision => collision.id !== SCENES_ROOT_DROP_ID);
+      if (rowCollisions.length > 0) {
+        return rowCollisions.filter(collision => !blockedIdsRef.current.has(String(collision.id)));
       }
-      lastDragOverInfo.current = dragOverInfo2;
-      setDragOverInfo(dragOverInfo2);
-    };
-    const handleDragStart = e => {
-      const {active: active} = e;
-      const sceneId = active.id;
-      if (!isSceneSelected(sceneId)) {
-        selectSceneWithModifiers(visibleSceneIds, sceneId, {
-          ctrlKey: false,
-          shiftKey: false
-        });
-        setDraggedSceneIds([ sceneId ]);
-        setDragCount(1);
-      } else {
-        setDraggedSceneIds(selectedSceneIds);
-        setDragCount(selectedSceneIds.length);
-      }
-    };
-    const handleDragMove = e => {
-      const {over: over, active: active} = e;
-      if (!over) {
-        setLastDragOverInfo(null);
-        return;
-      }
-      if (over.id === "ROOT") {
-        if (scenes.length > 0) {
-          const lastScene = scenes[scenes.length - 1];
-          setLastDragOverInfo({
-            id: lastScene.id,
-            position: DragPosition.After
-          });
-        } else {
-          setLastDragOverInfo({
-            id: "ROOT",
-            position: DragPosition.Inside
-          });
-        }
-        return;
-      }
-      const overId = over.id;
-      const overElement = document.getElementById(`scene-${overId}`);
-      if (overElement && active.rect.current.translated) {
-        const rect = overElement.getBoundingClientRect();
-        const pointerY = active.rect.current.translated.top + active.rect.current.translated.height / 2;
-        const relativeY = pointerY - rect.top;
-        const height = rect.height;
-        if (relativeY <= height * .5) {
-          setLastDragOverInfo({
-            id: overId,
-            position: DragPosition.Before
-          });
-        } else {
-          setLastDragOverInfo({
-            id: overId,
-            position: DragPosition.After
-          });
-        }
-      }
+      return collisions.filter(collision => collision.id === SCENES_ROOT_DROP_ID);
     };
     const resetDragState = () => {
-      setDraggedSceneIds([]);
+      movingIdsRef.current = [];
+      blockedIdsRef.current = new Set;
+      pointerRef.current = null;
       setDragCount(0);
       setDragPosition(null);
       setDragOverInfo(null);
     };
-    const handleDragEnd = e => {
-      const {over: over} = e;
-      if (over && dragOverInfo && draggedSceneIds.length) {
-        const overId = over.id;
-        const targetIndex = visibleSceneIds.indexOf(overId) + (dragOverInfo.position === DragPosition.After ? 1 : 0);
-        Service.actions.scenes.move(draggedSceneIds, targetIndex);
+    const handleDragStart = event => {
+      const id = String(event.active.id);
+      const sceneStore = useSceneStore.getState();
+      const layoutStore = useLayoutStore.getState();
+      const {entities: entities, ids: ids} = sceneStore.scenes;
+      if (!entities[id]) return;
+      const selectedIds = layoutStore.selectedSceneIds.includes(id) ? layoutStore.selectedSceneIds : [ id ];
+      if (!layoutStore.selectedSceneIds.includes(id)) {
+        layoutStore.actions.scenes.selectOnly(id);
       }
-      resetDragState();
-    };
-    reactExports.useEffect(() => {
-      if (!dragCount) return;
-      const handler = e => {
-        setDragPosition({
-          x: e.clientX,
-          y: e.clientY
-        });
+      const selected = new Set(selectedIds);
+      const movingIds = ids.filter(sceneId => {
+        if (!selected.has(sceneId)) return false;
+        let parentId = entities[sceneId].parentId;
+        while (parentId !== void 0) {
+          if (selected.has(parentId)) {
+            return false;
+          }
+          parentId = entities[parentId]?.parentId;
+        }
+        return true;
+      });
+      const blockedIds = new Set;
+      const collectSubtree = sceneId => {
+        if (blockedIds.has(sceneId)) return;
+        const scene = entities[sceneId];
+        if (!scene) return;
+        blockedIds.add(sceneId);
+        if (scene.type === SceneType$1.Group) {
+          scene.childrenIds.forEach(collectSubtree);
+        }
       };
-      window.addEventListener("mousemove", handler);
-      return () => window.removeEventListener("mousemove", handler);
-    }, [ dragCount ]);
-    const handleClick = reactExports.useCallback((e, id) => {
+      movingIds.forEach(collectSubtree);
+      movingIdsRef.current = movingIds;
+      blockedIdsRef.current = blockedIds;
+      setDragCount(movingIds.length);
+      setDragOverInfo(null);
+      setDragPosition(null);
+    };
+    const getDropInfo = event => {
+      const {over: over} = event;
+      if (!over) return null;
+      if (over.id === SCENES_ROOT_DROP_ID) {
+        return {
+          id: SCENES_ROOT_DROP_ID,
+          position: DragPosition.Inside
+        };
+      }
+      const id = String(over.id);
+      if (blockedIdsRef.current.has(id)) return null;
+      const scene = useSceneStore.getState().scenes.entities[id];
+      const pointer = pointerRef.current;
+      if (!scene || !pointer) return null;
+      const relativeY = pointer.y - over.rect.top;
+      const height = over.rect.height;
+      if (scene.type === SceneType$1.Group) {
+        if (relativeY < height * .25) {
+          return {
+            id: id,
+            position: DragPosition.Before
+          };
+        }
+        if (relativeY > height * .75) {
+          return {
+            id: id,
+            position: DragPosition.After
+          };
+        }
+        return {
+          id: id,
+          position: DragPosition.Inside
+        };
+      }
+      return {
+        id: id,
+        position: relativeY < height * .5 ? DragPosition.Before : DragPosition.After
+      };
+    };
+    const handleDragMove = event => {
+      const next = getDropInfo(event);
+      setDragOverInfo(previous => {
+        if (previous?.id === next?.id && previous?.position === next?.position) {
+          return previous;
+        }
+        return next;
+      });
+      const pointer = pointerRef.current;
+      if (pointer) {
+        setDragPosition({
+          x: pointer.x,
+          y: pointer.y
+        });
+      }
+    };
+    const handleDragEnd = event => {
+      try {
+        const dropInfo = getDropInfo(event);
+        const movingIds = movingIdsRef.current;
+        if (!dropInfo || movingIds.length === 0) return;
+        const {entities: entities, rootIds: rootIds} = useSceneStore.getState().scenes;
+        const movingSet = new Set(movingIds);
+        let parentId;
+        let containerIds;
+        let anchorId = null;
+        if (dropInfo.id === SCENES_ROOT_DROP_ID) {
+          parentId = null;
+          containerIds = rootIds;
+        } else {
+          const target = entities[dropInfo.id];
+          if (!target || blockedIdsRef.current.has(target.id)) {
+            return;
+          }
+          if (dropInfo.position === DragPosition.Inside) {
+            if (target.type !== SceneType$1.Group) return;
+            parentId = target.id;
+            containerIds = target.childrenIds;
+          } else {
+            parentId = target.parentId ?? null;
+            anchorId = target.id;
+            if (parentId === null) {
+              containerIds = rootIds;
+            } else {
+              const parent = entities[parentId];
+              if (!parent || parent.type !== SceneType$1.Group) {
+                return;
+              }
+              containerIds = parent.childrenIds;
+            }
+          }
+        }
+        const remainingIds = containerIds.filter(id => !movingSet.has(id));
+        let pos = remainingIds.length;
+        if (anchorId !== null) {
+          const anchorIndex = remainingIds.indexOf(anchorId);
+          if (anchorIndex === -1) return;
+          pos = anchorIndex + (dropInfo.position === DragPosition.After ? 1 : 0);
+        }
+        const nextIds = [ ...remainingIds ];
+        nextIds.splice(pos, 0, ...movingIds);
+        const sameParents = movingIds.every(id => (entities[id]?.parentId ?? null) === parentId);
+        const sameOrder = nextIds.length === containerIds.length && nextIds.every((id, index) => id === containerIds[index]);
+        if (sameParents && sameOrder) return;
+        Service.actions.scenes.move(movingIds, parentId, pos);
+      } finally {
+        resetDragState();
+      }
+    };
+    const handleClick = reactExports.useCallback((event, id) => {
       clearLayersSelection();
       selectSceneWithModifiers(visibleSceneIds, id, {
-        ctrlKey: e.ctrlKey || e.metaKey,
-        shiftKey: e.shiftKey
+        ctrlKey: event.ctrlKey || event.metaKey,
+        shiftKey: event.shiftKey
       });
-    }, [ visibleSceneIds, selectSceneWithModifiers ]);
+    }, [ clearLayersSelection, selectSceneWithModifiers, visibleSceneIds ]);
     const scrollContainerRef = reactExports.useRef(null);
     const [scrollTop, setScrollTop] = reactExports.useState(0);
     const [containerHeight, setContainerHeight] = reactExports.useState(0);
     reactExports.useEffect(() => {
-      if (!scrollContainerRef.current) return;
+      const element = scrollContainerRef.current;
+      if (!element) return;
       const observer = new ResizeObserver(entries => {
         for (const entry of entries) {
           setContainerHeight(entry.contentRect.height);
         }
       });
-      observer.observe(scrollContainerRef.current);
+      observer.observe(element);
       return () => observer.disconnect();
     }, []);
-    const handleScroll = e => {
-      setScrollTop(e.currentTarget.scrollTop);
-    };
-    const totalCount = visibleScenes.length;
+    const totalCount = flattenScenes.length;
     const totalHeight = totalCount * ROW_HEIGHT;
+    reactExports.useEffect(() => {
+      const element = scrollContainerRef.current;
+      if (!element) return;
+      setScrollTop(element.scrollTop);
+    }, [ totalCount, containerHeight ]);
     const overscan = 10;
-    const visibleSceneCount = containerHeight > 0 ? Math.ceil(containerHeight / ROW_HEIGHT) : 0;
-    const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - overscan);
-    const endIndex = Math.min(totalCount, startIndex + visibleSceneCount + overscan * 2);
-    const virtualScenes = visibleScenes.slice(startIndex, endIndex);
-    return jsxRuntimeExports.jsx("div", {
-      ref: setRootNodeRef,
-      className: cn("relative h-full overflow-hidden inner-shadow", isOverRoot && "bg-muted/10"),
-      children: jsxRuntimeExports.jsxs(DndContext, {
-        sensors: sensors,
-        collisionDetection: closestCenter,
-        measuring: {
-          droppable: {
-            strategy: MeasuringStrategy.Always
-          }
-        },
-        onDragStart: handleDragStart,
-        onDragMove: handleDragMove,
-        onDragEnd: handleDragEnd,
+    const visibleCount = containerHeight > 0 ? Math.ceil(containerHeight / ROW_HEIGHT) : 0;
+    const firstVisibleIndex = Math.min(Math.floor(scrollTop / ROW_HEIGHT), Math.max(0, totalCount - 1));
+    const startIndex = Math.max(0, firstVisibleIndex - overscan);
+    const endIndex = Math.min(totalCount, startIndex + visibleCount + overscan * 2);
+    const virtualScenes = flattenScenes.slice(startIndex, endIndex);
+    return jsxRuntimeExports.jsx(DndContext, {
+      sensors: sensors,
+      collisionDetection: collisionDetection,
+      measuring: {
+        droppable: {
+          strategy: MeasuringStrategy.Always
+        }
+      },
+      onDragStart: handleDragStart,
+      onDragMove: handleDragMove,
+      onDragOver: handleDragMove,
+      onDragEnd: handleDragEnd,
+      onDragCancel: resetDragState,
+      children: jsxRuntimeExports.jsxs(ScenesRootDropZone, {
+        highlighted: dragOverInfo?.id === SCENES_ROOT_DROP_ID,
         children: [ jsxRuntimeExports.jsx("div", {
           ref: scrollContainerRef,
-          onScroll: handleScroll,
+          onScroll: event => {
+            setScrollTop(event.currentTarget.scrollTop);
+          },
           className: "h-full p-1 overflow-y-auto",
-          children: jsxRuntimeExports.jsx("div", {
-            style: {
-              height: totalHeight
-            },
-            className: "relative",
+          children: jsxRuntimeExports.jsx(SortableContext, {
+            items: visibleSceneIds,
+            strategy: verticalListSortingStrategy,
             children: jsxRuntimeExports.jsx("div", {
               style: {
-                transform: `translateY(${startIndex * ROW_HEIGHT}px)`,
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0
+                height: totalHeight
               },
-              className: "flex flex-col",
-              children: virtualScenes.map(scene => jsxRuntimeExports.jsx(SceneRow, {
-                scene: scene,
-                dragOverInfo: dragOverInfo,
-                onClick: e => handleClick(e, scene.id)
-              }, scene.id))
+              className: "relative",
+              children: jsxRuntimeExports.jsx("div", {
+                style: {
+                  transform: `translateY(${startIndex * ROW_HEIGHT}px)`,
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0
+                },
+                className: "flex flex-col",
+                children: virtualScenes.map(row => jsxRuntimeExports.jsx(SceneRow, {
+                  scene: sceneEntities[row.id],
+                  depth: row.depth,
+                  dragOverInfo: dragOverInfo,
+                  onClick: event => handleClick(event, row.id)
+                }, row.id))
+              })
             })
           })
         }), dragCount > 0 && dragPosition && jsxRuntimeExports.jsx(DragPreview$2, {
           count: dragCount,
           style: {
             left: dragPosition.x + 12,
-            top: dragPosition.y + 12
+            top: dragPosition.y + 12,
+            pointerEvents: "none"
           }
         }) ]
       })
@@ -38464,7 +38940,7 @@
         className: "picpoints-note",
         children: [ jsxRuntimeExports.jsx("b", {
           children: "Note:"
-        }), " The Lite version supports up to 3 scenes." ]
+        }), " The Lite version supports up to 3 scenes in total." ]
       }) ]
     });
   };
@@ -38552,14 +39028,20 @@
       Service.actions.layers.copy(selectedLayerIds);
     };
     const handleAddNewGroup = () => {
-      if (!activeSceneId) return;
+      const layoutStore = useLayoutStore.getState();
+      const layerStore = useLayerStore.getState();
+      const {activeSceneId: activeSceneId2, selectedLayerIds: selectedLayerIds2} = layoutStore;
+      if (!activeSceneId2) return;
+      const selectedLayer = selectedLayerIds2.length === 1 ? layerStore.actions.get(selectedLayerIds2[0]) : null;
+      const parentId = selectedLayer?.type === LayerType$1.Group && selectedLayer.sceneId === activeSceneId2 ? selectedLayer.id : void 0;
       const layer = {
         id: generateId$1(),
-        parentId: void 0,
+        parentId: parentId,
         type: LayerType$1.Group,
         name: "Group",
-        sceneId: activeSceneId,
-        childrenIds: []
+        sceneId: activeSceneId2,
+        childrenIds: [],
+        collapsed: false
       };
       Service.actions.layers.add(layer, 0);
     };
@@ -38629,7 +39111,7 @@
               })
             })
           }), jsxRuntimeExports.jsxs(TooltipContent, {
-            children: [ "Delete selected layers ", jsxRuntimeExports.jsx(Kbd, {
+            children: [ "Delete selected layers and groups ", jsxRuntimeExports.jsx(Kbd, {
               children: "Del"
             }) ]
           }) ]
@@ -38890,157 +39372,229 @@
       }) ]
     });
   };
+  const LAYERS_ROOT_DROP_ID = "layer-tree-root-drop-zone";
+  const LayersRootDropZone = ({children: children, highlighted: highlighted}) => {
+    const {setNodeRef: setNodeRef} = useDroppable({
+      id: LAYERS_ROOT_DROP_ID
+    });
+    return jsxRuntimeExports.jsx("div", {
+      ref: setNodeRef,
+      className: cn("relative h-full min-h-0 overflow-hidden inner-shadow", highlighted && "ring-2 ring-inset ring-primary"),
+      children: children
+    });
+  };
   const LayersTree = () => {
-    const {activeScene: activeScene, activeSceneId: activeSceneId, layersTree: layersTree, flattenLayers: flattenLayers} = useActiveSceneLayers();
+    const {activeSceneId: activeSceneId, flattenLayers: flattenLayers} = useActiveSceneLayers();
     const selectedLayerIds = useLayoutStore(s => s.selectedLayerIds);
     const selectLayerWithModifiers = useLayoutStore(s => s.actions.layers.selectWithModifiers);
-    const isLayerSelected = useLayoutStore(s => s.actions.layers.isSelected);
-    const layersRootIds = useLayerStore(s => s.layers.rootIds);
-    const getLayer = useLayerStore(s => s.actions.get);
+    const visibleLayerIds = reactExports.useMemo(() => flattenLayers.map(layer => layer.id), [ flattenLayers ]);
+    const visibleLayers = flattenLayers;
     const sensors = useSensors(useSensor(PointerSensor, {
       activationConstraint: {
         distance: 5
       }
     }));
-    const {setNodeRef: setRootNodeRef, isOver: isOverRoot} = useDroppable({
-      id: "ROOT",
-      disabled: false
-    });
-    const [draggedLayerIds, setDraggedLayerIds] = reactExports.useState([]);
     const [dragCount, setDragCount] = reactExports.useState(0);
     const [dragPosition, setDragPosition] = reactExports.useState(null);
     const [dragOverInfo, setDragOverInfo] = reactExports.useState(null);
-    const lastDragOverInfo = reactExports.useRef(null);
-    const visibleLayerIds = reactExports.useMemo(() => flattenLayers.filter(n => !draggedLayerIds.includes(n.id)).map(n => n.id), [ flattenLayers, draggedLayerIds ]);
-    const visibleLayers = reactExports.useMemo(() => flattenLayers.filter(n => !draggedLayerIds.includes(n.id)), [ flattenLayers, draggedLayerIds ]);
-    const setLastDragOverInfo = dragOverInfo2 => {
-      const current = lastDragOverInfo.current;
-      if (!current && !dragOverInfo2) return;
-      if (current && dragOverInfo2 && current.id === dragOverInfo2.id && current.position === dragOverInfo2.position) {
-        return;
+    const movingIdsRef = reactExports.useRef([]);
+    const blockedIdsRef = reactExports.useRef(new Set);
+    const pointerRef = reactExports.useRef(null);
+    const collisionDetection = args => {
+      pointerRef.current = args.pointerCoordinates;
+      const collisions = pointerWithin(args);
+      const rowCollisions = collisions.filter(collision => collision.id !== LAYERS_ROOT_DROP_ID);
+      if (rowCollisions.length > 0) {
+        return rowCollisions.filter(collision => !blockedIdsRef.current.has(String(collision.id)));
       }
-      lastDragOverInfo.current = dragOverInfo2;
-      setDragOverInfo(dragOverInfo2);
-    };
-    const handleDragStart = e => {
-      if (!activeScene) return;
-      const {active: active} = e;
-      const layerId = active.id;
-      if (!isLayerSelected(layerId)) {
-        selectLayerWithModifiers(visibleLayerIds, layerId, {
-          ctrlKey: false,
-          shiftKey: false
-        });
-        const dragged = collectSubtreeLayerIds(layersTree, [ layerId ]);
-        setDraggedLayerIds(dragged);
-        setDragCount(dragged.length);
-      } else {
-        const dragged = collectSubtreeLayerIds(layersTree, selectedLayerIds);
-        setDraggedLayerIds(dragged);
-        setDragCount(dragged.length);
-      }
-    };
-    const handleDragMove = e => {
-      const {over: over, active: active} = e;
-      if (!over) {
-        setLastDragOverInfo(null);
-        return;
-      }
-      if (over.id === "ROOT") {
-        if (flattenLayers.length > 0) {
-          const lastLayer = flattenLayers[flattenLayers.length - 1];
-          setLastDragOverInfo({
-            id: lastLayer.id,
-            position: DragPosition.After
-          });
-        } else {
-          setLastDragOverInfo({
-            id: "ROOT",
-            position: DragPosition.Inside
-          });
-        }
-        return;
-      }
-      const overId = over.id;
-      const overElement = document.getElementById(`layer-${overId}`);
-      if (overElement && active.rect.current.translated) {
-        const rect = overElement.getBoundingClientRect();
-        const pointerY = active.rect.current.translated.top + active.rect.current.translated.height / 2;
-        const relativeY = pointerY - rect.top;
-        const height = rect.height;
-        if (relativeY < height * .25) {
-          setLastDragOverInfo({
-            id: overId,
-            position: DragPosition.Before
-          });
-        } else if (relativeY > height * .75) {
-          setLastDragOverInfo({
-            id: overId,
-            position: DragPosition.After
-          });
-        } else {
-          setLastDragOverInfo({
-            id: overId,
-            position: DragPosition.Inside
-          });
-        }
-      }
+      return collisions.filter(collision => collision.id === LAYERS_ROOT_DROP_ID);
     };
     const resetDragState = () => {
-      setDraggedLayerIds([]);
+      movingIdsRef.current = [];
+      blockedIdsRef.current = new Set;
+      pointerRef.current = null;
       setDragCount(0);
       setDragPosition(null);
       setDragOverInfo(null);
     };
-    const handleDragEnd = e => {
-      if (!activeScene) {
-        resetDragState();
-        return;
+    const handleDragStart = event => {
+      if (!activeSceneId) return;
+      const id = String(event.active.id);
+      const layerStore = useLayerStore.getState();
+      const layoutStore = useLayoutStore.getState();
+      const {entities: entities, ids: ids} = layerStore.layers;
+      const layer = entities[id];
+      if (!layer || layer.sceneId !== activeSceneId) return;
+      const selectedIds = layoutStore.selectedLayerIds.includes(id) ? layoutStore.selectedLayerIds : [ id ];
+      if (!layoutStore.selectedLayerIds.includes(id)) {
+        layoutStore.actions.layers.selectOnly(id);
       }
-      const {over: over} = e;
-      if (over && dragOverInfo && draggedLayerIds.length) {
-        const movedLayerIds = collectTopLevelLayerIds(layersTree, draggedLayerIds);
-        const overLayer = getLayer(dragOverInfo.id);
-        if (!overLayer) {
-          resetDragState();
-          return;
+      const selected = new Set(selectedIds.filter(selectedId => entities[selectedId]?.sceneId === activeSceneId));
+      const movingIds = ids.filter(layerId => {
+        const current = entities[layerId];
+        if (!current || current.sceneId !== activeSceneId || !selected.has(layerId)) {
+          return false;
         }
-        const isGroup = overLayer.type === LayerType$1.Group;
-        const position = dragOverInfo.position === DragPosition.Inside && !isGroup ? DragPosition.After : dragOverInfo.position;
-        let parentId = null;
-        let pos = 0;
-        if (position === DragPosition.Inside) {
-          parentId = overLayer.id;
-          pos = overLayer?.childrenIds.length;
+        let parentId = current.parentId;
+        while (parentId !== void 0) {
+          if (selected.has(parentId)) {
+            return false;
+          }
+          parentId = entities[parentId]?.parentId;
+        }
+        return true;
+      });
+      const blockedIds = new Set;
+      const collectSubtree = layerId => {
+        if (blockedIds.has(layerId)) return;
+        const current = entities[layerId];
+        if (!current) return;
+        blockedIds.add(layerId);
+        if (current.type === LayerType$1.Group) {
+          current.childrenIds.forEach(collectSubtree);
+        }
+      };
+      movingIds.forEach(collectSubtree);
+      movingIdsRef.current = movingIds;
+      blockedIdsRef.current = blockedIds;
+      setDragCount(movingIds.length);
+      setDragOverInfo(null);
+      setDragPosition(null);
+    };
+    const getDropInfo = event => {
+      const {over: over} = event;
+      if (!over) return null;
+      if (over.id === LAYERS_ROOT_DROP_ID) {
+        return {
+          id: LAYERS_ROOT_DROP_ID,
+          position: DragPosition.Inside
+        };
+      }
+      const id = String(over.id);
+      if (blockedIdsRef.current.has(id)) return null;
+      const layer = useLayerStore.getState().layers.entities[id];
+      const pointer = pointerRef.current;
+      if (!layer || layer.sceneId !== activeSceneId || !pointer) {
+        return null;
+      }
+      const relativeY = pointer.y - over.rect.top;
+      const height = over.rect.height;
+      if (layer.type === LayerType$1.Group) {
+        if (relativeY < height * .25) {
+          return {
+            id: id,
+            position: DragPosition.Before
+          };
+        }
+        if (relativeY > height * .75) {
+          return {
+            id: id,
+            position: DragPosition.After
+          };
+        }
+        return {
+          id: id,
+          position: DragPosition.Inside
+        };
+      }
+      return {
+        id: id,
+        position: relativeY < height * .5 ? DragPosition.Before : DragPosition.After
+      };
+    };
+    const handleDragMove = event => {
+      const next = getDropInfo(event);
+      setDragOverInfo(previous => {
+        if (previous?.id === next?.id && previous?.position === next?.position) {
+          return previous;
+        }
+        return next;
+      });
+      const pointer = pointerRef.current;
+      if (pointer) {
+        setDragPosition({
+          x: pointer.x,
+          y: pointer.y
+        });
+      }
+    };
+    const handleDragEnd = event => {
+      try {
+        if (!activeSceneId) return;
+        const dropInfo = getDropInfo(event);
+        const movingIds = movingIdsRef.current;
+        if (!dropInfo || movingIds.length === 0) return;
+        const {entities: entities, rootIds: rootIds} = useLayerStore.getState().layers;
+        const movingSet = new Set(movingIds);
+        const sceneRootIds = rootIds.filter(id => entities[id]?.sceneId === activeSceneId);
+        let parentId;
+        let containerIds;
+        let anchorId = null;
+        if (dropInfo.id === LAYERS_ROOT_DROP_ID) {
+          parentId = null;
+          containerIds = sceneRootIds;
         } else {
-          parentId = overLayer.parentId ?? null;
-          const siblings = parentId ? getLayer(parentId).childrenIds : layersRootIds;
-          const index = siblings.indexOf(overLayer.id);
-          if (index >= 0) {
-            pos = position === DragPosition.Before ? index : index + 1;
+          const target = entities[dropInfo.id];
+          if (!target || target.sceneId !== activeSceneId || blockedIdsRef.current.has(target.id)) {
+            return;
+          }
+          if (dropInfo.position === DragPosition.Inside) {
+            if (target.type !== LayerType$1.Group) return;
+            parentId = target.id;
+            containerIds = target.childrenIds;
+          } else {
+            parentId = target.parentId ?? null;
+            anchorId = target.id;
+            if (parentId === null) {
+              containerIds = sceneRootIds;
+            } else {
+              const parent = entities[parentId];
+              if (!parent || parent.type !== LayerType$1.Group) {
+                return;
+              }
+              containerIds = parent.childrenIds;
+            }
           }
         }
-        Service.actions.layers.move(movedLayerIds, parentId, pos);
+        const remainingIds = containerIds.filter(id => !movingSet.has(id));
+        let pos = remainingIds.length;
+        if (anchorId !== null) {
+          const anchorIndex = remainingIds.indexOf(anchorId);
+          if (anchorIndex === -1) return;
+          pos = anchorIndex + (dropInfo.position === DragPosition.After ? 1 : 0);
+        }
+        const nextIds = [ ...remainingIds ];
+        nextIds.splice(pos, 0, ...movingIds);
+        const sameParents = movingIds.every(id => (entities[id]?.parentId ?? null) === parentId);
+        const sameOrder = nextIds.length === containerIds.length && nextIds.every((id, index) => id === containerIds[index]);
+        if (sameParents && sameOrder) return;
+        let storePos = pos;
+        if (parentId === null) {
+          const remainingGlobalRootIds = rootIds.filter(id => !movingSet.has(id));
+          const remainingSceneRootIds = remainingGlobalRootIds.filter(id => entities[id]?.sceneId === activeSceneId);
+          if (pos < remainingSceneRootIds.length) {
+            storePos = remainingGlobalRootIds.indexOf(remainingSceneRootIds[pos]);
+          } else if (remainingSceneRootIds.length > 0) {
+            const lastSceneRootId = remainingSceneRootIds[remainingSceneRootIds.length - 1];
+            storePos = remainingGlobalRootIds.indexOf(lastSceneRootId) + 1;
+          } else {
+            storePos = remainingGlobalRootIds.length;
+          }
+        }
+        Service.actions.layers.move(movingIds, parentId, storePos);
+      } finally {
+        resetDragState();
       }
-      resetDragState();
     };
-    reactExports.useEffect(() => {
-      if (!dragCount) return;
-      const handler = e => {
-        setDragPosition({
-          x: e.clientX,
-          y: e.clientY
-        });
-      };
-      window.addEventListener("mousemove", handler);
-      return () => window.removeEventListener("mousemove", handler);
-    }, [ dragCount ]);
-    const handleClick = reactExports.useCallback((e, id) => {
+    const handleClick = reactExports.useCallback((event, id) => {
       selectLayerWithModifiers(visibleLayerIds, id, {
-        ctrlKey: e.ctrlKey || e.metaKey,
-        shiftKey: e.shiftKey
+        ctrlKey: event.ctrlKey || event.metaKey,
+        shiftKey: event.shiftKey
       });
-    }, [ activeSceneId, visibleLayerIds, selectLayerWithModifiers ]);
+    }, [ visibleLayerIds, selectLayerWithModifiers ]);
+    const scrollContainerRef = reactExports.useRef(null);
+    const [scrollTop, setScrollTop] = reactExports.useState(0);
+    const [containerHeight, setContainerHeight] = reactExports.useState(0);
     reactExports.useEffect(() => {
       if (selectedLayerIds.length !== 1 || !scrollContainerRef.current) return;
       const activeIndex = visibleLayers.findIndex(layer => layer.id === selectedLayerIds[0]);
@@ -39060,9 +39614,6 @@
         });
       }
     }, [ selectedLayerIds, visibleLayers ]);
-    const scrollContainerRef = reactExports.useRef(null);
-    const [scrollTop, setScrollTop] = reactExports.useState(0);
-    const [containerHeight, setContainerHeight] = reactExports.useState(0);
     reactExports.useEffect(() => {
       if (!scrollContainerRef.current) return;
       const observer = new ResizeObserver(entries => {
@@ -39084,20 +39635,21 @@
     const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - overscan);
     const endIndex = Math.min(totalCount, startIndex + visibleNodeCount + overscan * 2);
     const virtualLayers = visibleLayers.slice(startIndex, endIndex);
-    return jsxRuntimeExports.jsx("div", {
-      ref: setRootNodeRef,
-      className: cn("h-full overflow-hidden relative inner-shadow", isOverRoot && "bg-muted/10"),
-      children: jsxRuntimeExports.jsxs(DndContext, {
-        sensors: sensors,
-        collisionDetection: closestCenter,
-        measuring: {
-          droppable: {
-            strategy: MeasuringStrategy.Always
-          }
-        },
-        onDragStart: handleDragStart,
-        onDragMove: handleDragMove,
-        onDragEnd: handleDragEnd,
+    return jsxRuntimeExports.jsx(DndContext, {
+      sensors: sensors,
+      collisionDetection: collisionDetection,
+      measuring: {
+        droppable: {
+          strategy: MeasuringStrategy.Always
+        }
+      },
+      onDragStart: handleDragStart,
+      onDragMove: handleDragMove,
+      onDragOver: handleDragMove,
+      onDragEnd: handleDragEnd,
+      onDragCancel: resetDragState,
+      children: jsxRuntimeExports.jsxs(LayersRootDropZone, {
+        highlighted: dragOverInfo?.id === LAYERS_ROOT_DROP_ID,
         children: [ jsxRuntimeExports.jsx("div", {
           ref: scrollContainerRef,
           onScroll: handleScroll,
@@ -39109,32 +39661,37 @@
                 children: "Note:"
               }), " The Lite version supports up to 10 layers per scene." ]
             }) ]
-          }) : jsxRuntimeExports.jsx("div", {
-            style: {
-              height: totalHeight
-            },
-            className: "relative",
+          }) : jsxRuntimeExports.jsx(SortableContext, {
+            items: visibleLayerIds,
+            strategy: verticalListSortingStrategy,
             children: jsxRuntimeExports.jsx("div", {
               style: {
-                transform: `translateY(${startIndex * ROW_HEIGHT}px)`,
-                position: "absolute",
-                top: 0,
-                left: 0,
-                right: 0
+                height: totalHeight
               },
-              className: "flex flex-col",
-              children: virtualLayers.map(flattenLayer => jsxRuntimeExports.jsx(LayerRow, {
-                flattenLayer: flattenLayer,
-                dragOverInfo: dragOverInfo,
-                onClick: e => handleClick(e, flattenLayer.id)
-              }, flattenLayer.id))
+              className: "relative",
+              children: jsxRuntimeExports.jsx("div", {
+                style: {
+                  transform: `translateY(${startIndex * ROW_HEIGHT}px)`,
+                  position: "absolute",
+                  top: 0,
+                  left: 0,
+                  right: 0
+                },
+                className: "flex flex-col",
+                children: virtualLayers.map(flattenLayer => jsxRuntimeExports.jsx(LayerRow, {
+                  flattenLayer: flattenLayer,
+                  dragOverInfo: dragOverInfo,
+                  onClick: event => handleClick(event, flattenLayer.id)
+                }, flattenLayer.id))
+              })
             })
           })
         }), dragCount > 0 && dragPosition && jsxRuntimeExports.jsx(DragPreview$1, {
           count: dragCount,
           style: {
             left: dragPosition.x + 12,
-            top: dragPosition.y + 12
+            top: dragPosition.y + 12,
+            pointerEvents: "none"
           }
         }) ]
       })
@@ -39143,7 +39700,7 @@
   const LayersData = () => {
     const {activeSceneId: activeSceneId} = useActiveSceneLayers();
     return activeSceneId ? jsxRuntimeExports.jsx(LayersTree, {}) : jsxRuntimeExports.jsx(Placeholder$1, {
-      children: "Select a scene to manage its layers."
+      children: "Select a single scene to manage its layers."
     });
   };
   const ScenesAndLayers = () => {
@@ -65966,7 +66523,9 @@
     }, [ sceneId, layerIds ]);
     const {hasLayers: hasLayers, layersTree: layersTree} = useActiveSceneLayers();
     const containerRef = useMeasureBounds(sceneId, matrix, sceneLayerIds);
-    if (!scene) return null;
+    if (!scene || scene.type !== SceneType$1.Object) {
+      return null;
+    }
     return jsxRuntimeExports.jsx("div", {
       ref: containerRef,
       "data-name": "scene",
@@ -69212,10 +69771,13 @@
   };
   const MainPanel = () => {
     const activeSceneId = useLayoutStore(s => s.activeSceneId);
-    const activeSceneCanvasSize = useSceneStore(useShallow(s => {
+    const objectScenesCount = useSceneStore(s => s.scenes.ids.reduce((count, id) => s.scenes.entities[id]?.type === SceneType$1.Object ? count + 1 : count, 0));
+    const activeSceneCanvasSize = useSceneStore(useShallow(state => {
       if (!activeSceneId) return null;
-      const scene = s.scenes.entities[activeSceneId];
-      if (!scene) return null;
+      const scene = state.scenes.entities[activeSceneId];
+      if (!scene || scene.type !== SceneType$1.Object) {
+        return null;
+      }
       return {
         width: scene.canvas?.width ?? 0,
         height: scene.canvas?.height ?? 0
@@ -69369,7 +69931,25 @@
       }
     };
     const handleNewScene = () => {
-      Service.actions.scenes.add();
+      const sceneStore = useSceneStore.getState();
+      const scene = {
+        id: generateId$1(),
+        type: SceneType$1.Object,
+        name: `Scene ${sceneStore.actions.size() + 1}`,
+        background: {
+          enabled: true,
+          color: "#f1f1f1"
+        },
+        canvas: {
+          width: 800,
+          height: 600,
+          background: {
+            enabled: true,
+            color: "#fff"
+          }
+        }
+      };
+      Service.actions.scenes.add(scene);
     };
     if (!activeSceneId || !activeSceneCanvasSize) {
       return jsxRuntimeExports.jsx("div", {
@@ -69377,7 +69957,7 @@
         children: jsxRuntimeExports.jsx(Placeholder$1, {
           children: jsxRuntimeExports.jsxs("div", {
             className: "flex flex-col gap-2 items-center",
-            children: [ jsxRuntimeExports.jsx("div", {
+            children: [ objectScenesCount === 0 && jsxRuntimeExports.jsx("div", {
               className: "hover:text-primary cursor-pointer",
               onClick: handleNewScene,
               children: jsxRuntimeExports.jsxs("svg", {
@@ -69407,7 +69987,7 @@
                 }) ]
               })
             }), jsxRuntimeExports.jsx("span", {
-              children: "To build an interactive map, you need to create at least one scene."
+              children: objectScenesCount > 0 ? "Select a single scene to edit its canvas." : "To build an interactive map, create at least one scene."
             }) ]
           })
         })
@@ -82127,6 +82707,11 @@
       this.activeSceneView = null;
     }
   }
+  var SceneType;
+  (function(SceneType) {
+    SceneType["Group"] = "group";
+    SceneType["Object"] = "object";
+  })(SceneType || (SceneType = {}));
   class Matrix {
     m=[];
     constructor(a = 1, b = 0, c = 0, d = 1, tx = 0, ty = 0) {
@@ -89151,21 +89736,25 @@
       return this.activeSceneId ? this.scenes.get(this.activeSceneId) ?? null : null;
     }
     getList() {
-      return this.sceneOrder.map(id => this.scenes.get(id)).filter(Boolean);
+      return this.sceneOrder.map(id => this.scenes.get(id)).filter(scene => scene !== void 0);
     }
     getNext(loop = false) {
       if (!this.activeSceneId) return null;
-      const idx = this.sceneOrder.indexOf(this.activeSceneId);
-      const nextIdx = idx + 1;
-      if (nextIdx >= this.sceneOrder.length) return loop ? this.getList()[0] ?? null : null;
-      return this.scenes.get(this.sceneOrder[nextIdx]) ?? null;
+      const index = this.sceneOrder.indexOf(this.activeSceneId);
+      const nextIndex = index + 1;
+      if (nextIndex >= this.sceneOrder.length) {
+        return loop ? this.getList()[0] ?? null : null;
+      }
+      return this.scenes.get(this.sceneOrder[nextIndex]) ?? null;
     }
     getPrev(loop = false) {
       if (!this.activeSceneId) return null;
-      const idx = this.sceneOrder.indexOf(this.activeSceneId);
-      const prevIdx = idx - 1;
-      if (prevIdx < 0) return loop ? this.getList().at(-1) ?? null : null;
-      return this.scenes.get(this.sceneOrder[prevIdx]) ?? null;
+      const index = this.sceneOrder.indexOf(this.activeSceneId);
+      const previousIndex = index - 1;
+      if (previousIndex < 0) {
+        return loop ? this.getList().at(-1) ?? null : null;
+      }
+      return this.scenes.get(this.sceneOrder[previousIndex]) ?? null;
     }
     setDefault(sceneId) {
       this.defaultSceneId = sceneId;
@@ -89174,14 +89763,27 @@
       return this.defaultSceneId;
     }
     add(scene) {
-      if (this.scenes.has(scene.id)) return false;
-      this.scenes.set(scene.id, scene);
-      this.sceneOrder.push(scene.id);
-      const sceneView = new SceneView(scene, this.containerEl, this.emitter, this.mapApi);
-      this.sceneViews.set(scene.id, sceneView);
+      if (scene.type === SceneType.Group) {
+        let added = false;
+        for (const child of scene.children ?? []) {
+          added = this.add(child) || added;
+        }
+        return added;
+      }
+      if (this.scenes.has(scene.id)) {
+        return false;
+      }
+      const objectScene = {
+        ...scene,
+        type: SceneType.Object
+      };
+      this.scenes.set(objectScene.id, objectScene);
+      this.sceneOrder.push(objectScene.id);
+      const sceneView = new SceneView(objectScene, this.containerEl, this.emitter, this.mapApi);
+      this.sceneViews.set(objectScene.id, sceneView);
       this.containerEl.append(sceneView.getSceneContainer());
       this.emitter.emit("scene:add", {
-        sceneId: scene.id
+        sceneId: objectScene.id
       });
       return true;
     }
@@ -100049,8 +100651,9 @@
           component: controlWidget.component
         });
       });
-      if (this.config.scenes?.length) {
-        const startSceneId = this.config.initialSceneId && this.sceneApi.has(this.config.initialSceneId) ? this.config.initialSceneId : this.config.scenes[0].id;
+      const firstScene = this.sceneApi.getList()[0];
+      if (firstScene) {
+        const startSceneId = this.config.initialSceneId && this.sceneApi.has(this.config.initialSceneId) ? this.config.initialSceneId : firstScene.id;
         let isLoaded = false;
         const showStartScene = () => {
           if (isLoaded) return;
@@ -100162,51 +100765,62 @@
       })
     });
   };
-  const SceneID = () => {
-    const initialSceneId = useAppStore(s => s.interactiveMap.config.initialSceneId);
-    const setConfig = useAppStore(s => s.actions.interactiveMap.setConfig);
+  function useSelectedScenes() {
+    const scenes = useSceneStore(s => s.scenes.entities);
     const selectedSceneIds = useLayoutStore(s => s.selectedSceneIds);
-    const activeSceneId = useLayoutStore(s => s.activeSceneId);
+    return reactExports.useMemo(() => selectedSceneIds.map(id => scenes[id]).filter(Boolean), [ selectedSceneIds, scenes ]);
+  }
+  function useSelectedObjectScenes() {
+    const selectedScenes = useSelectedScenes();
+    return reactExports.useMemo(() => selectedScenes.filter(scene => scene.type === SceneType$1.Object), [ selectedScenes ]);
+  }
+  const SceneID = () => {
+    const initialSceneId = useAppStore(state => state.interactiveMap.config.initialSceneId);
+    const setConfig = useAppStore(state => state.actions.interactiveMap.setConfig);
+    const selectedScenes = useSelectedScenes();
+    const selectedScene = selectedScenes.length === 1 ? selectedScenes[0] : void 0;
+    const canSetInitialScene = selectedScene?.type === SceneType$1.Object;
     const [copied, setCopied] = reactExports.useState(false);
     const timerRef = reactExports.useRef(null);
-    const selectedSceneId = reactExports.useMemo(() => {
-      if (selectedSceneIds.length !== 1) return void 0;
-      return selectedSceneIds[0];
-    }, [ selectedSceneIds ]);
     const copyToClipboard = reactExports.useCallback(() => {
-      if (!activeSceneId) return;
-      navigator.clipboard.writeText(activeSceneId).then(() => {
+      if (!selectedScene) return;
+      navigator.clipboard.writeText(selectedScene.id).then(() => {
         setCopied(true);
-        if (timerRef.current) clearTimeout(timerRef.current);
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+        }
         timerRef.current = setTimeout(() => setCopied(false), 1500);
       }).catch(error => {
         console.error("Failed to copy scene ID: ", error);
       });
-    }, [ activeSceneId ]);
+    }, [ selectedScene ]);
     reactExports.useEffect(() => () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+      }
     }, []);
-    const setInitialScene = reactExports.useCallback(sceneId => {
-      setConfig(prev => ({
-        ...prev,
-        initialSceneId: prev.initialSceneId === sceneId ? void 0 : sceneId
+    const toggleInitialScene = reactExports.useCallback(() => {
+      if (!selectedScene || !canSetInitialScene) return;
+      setConfig(previous => ({
+        ...previous,
+        initialSceneId: previous.initialSceneId === selectedScene.id ? void 0 : selectedScene.id
       }));
-    }, [ setConfig ]);
-    if (!activeSceneId || selectedSceneIds.length > 1) return null;
+    }, [ selectedScene, canSetInitialScene, setConfig ]);
+    if (!selectedScene) return null;
     return jsxRuntimeExports.jsxs("div", {
       className: "grid grid-cols-[minmax(100px,max-content)_1fr] gap-1 items-center",
       children: [ jsxRuntimeExports.jsx(Label$2, {
         children: "ID"
       }), jsxRuntimeExports.jsxs("div", {
         className: "relative flex gap-1 items-center",
-        children: [ selectedSceneId && jsxRuntimeExports.jsxs(Tooltip, {
+        children: [ canSetInitialScene && jsxRuntimeExports.jsxs(Tooltip, {
           children: [ jsxRuntimeExports.jsx(TooltipTrigger, {
             asChild: true,
             children: jsxRuntimeExports.jsx(Button$1, {
               variant: "ghost",
               size: "tiny",
-              onClick: () => setInitialScene(selectedSceneId),
-              className: cn(selectedSceneId === initialSceneId && "text-primary [&_svg]:fill-primary/30", "absolute top-1/2 -left-1 -translate-x-full -translate-y-1/2"),
+              onClick: toggleInitialScene,
+              className: cn(selectedScene.id === initialSceneId && "text-primary [&_svg]:fill-primary/30", "absolute top-1/2 -left-1 -translate-x-full -translate-y-1/2"),
               children: jsxRuntimeExports.jsx(Icons.Star, {
                 size: 16
               })
@@ -100218,7 +100832,7 @@
           readOnly: true,
           children: [ jsxRuntimeExports.jsx(InputGroupInput, {
             className: "font-mono",
-            value: activeSceneId ?? ""
+            value: selectedScene.id
           }), jsxRuntimeExports.jsx(InputGroupAddon, {
             align: "inline-end",
             children: jsxRuntimeExports.jsx(Button$1, {
@@ -100236,11 +100850,6 @@
       }) ]
     });
   };
-  function useSelectedScenes() {
-    const scenes = useSceneStore(s => s.scenes.entities);
-    const selectedSceneIds = useLayoutStore(s => s.selectedSceneIds);
-    return reactExports.useMemo(() => selectedSceneIds.map(id => scenes[id]).filter(Boolean), [ selectedSceneIds, scenes ]);
-  }
   const SceneName = () => {
     const selectedScenes = useSelectedScenes();
     const {commonName: commonName, isMixed: isMixed} = reactExports.useMemo(() => {
@@ -100302,7 +100911,7 @@
   const SceneCanvasSize = () => {
     const isSceneCanvasSizeLock = useLayoutStore(s => s.isSceneCanvasSizeLock);
     const setSceneCanvasSizeLock = useLayoutStore(s => s.setSceneCanvasSizeLock);
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonWidth: commonWidth, isWidthMixed: isWidthMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonWidth: void 0,
@@ -100482,7 +101091,7 @@
     });
   };
   const SceneCanvasClip = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonCanvasClip: commonCanvasClip, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonCanvasClip: false,
@@ -100535,7 +101144,7 @@
     });
   };
   const SceneSyncViewport = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonSyncViewport: commonSyncViewport, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonSyncViewport: false,
@@ -100621,7 +101230,7 @@
     return "number";
   };
   const SceneInitialZoom = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonType: commonType, commonInitialZoom: commonInitialZoom, isTypeMixed: isTypeMixed, isValueMixed: isValueMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonType: void 0,
@@ -100752,7 +101361,7 @@
     });
   };
   const SceneClassName = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonClassName: commonClassName, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonClassName: void 0,
@@ -100818,17 +101427,25 @@
       }) ]
     });
   };
-  const SceneMainSection = () => jsxRuntimeExports.jsxs(CollapsibleGroup, {
-    id: "scene-main",
-    defaultOpen: true,
-    label: "Scene Properties",
-    icon: jsxRuntimeExports.jsx(Icons.Properties, {
-      size: 16
-    }),
-    children: [ jsxRuntimeExports.jsx(SceneID, {}), jsxRuntimeExports.jsx(SceneName, {}), jsxRuntimeExports.jsx(SceneCanvasSize, {}), jsxRuntimeExports.jsx(SceneCanvasClip, {}), jsxRuntimeExports.jsx(SceneSyncViewport, {}), jsxRuntimeExports.jsx(SceneInitialZoom, {}), jsxRuntimeExports.jsx(SceneClassName, {}) ]
-  });
-  const SceneBackgroundEnabled = () => {
+  const SceneMainSection = () => {
     const selectedScenes = useSelectedScenes();
+    const hasGroup = selectedScenes.some(scene => scene.type === SceneType$1.Group);
+    const onlyGroups = selectedScenes.length > 0 && selectedScenes.every(scene => scene.type === SceneType$1.Group);
+    const label = onlyGroups ? "Group Properties" : hasGroup ? "Common Properties" : "Scene Properties";
+    return jsxRuntimeExports.jsxs(CollapsibleGroup, {
+      id: "scene-main",
+      defaultOpen: true,
+      label: label,
+      icon: jsxRuntimeExports.jsx(Icons.Properties, {
+        size: 16
+      }),
+      children: [ jsxRuntimeExports.jsx(SceneID, {}), jsxRuntimeExports.jsx(SceneName, {}), !hasGroup && jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, {
+        children: [ jsxRuntimeExports.jsx(SceneCanvasSize, {}), jsxRuntimeExports.jsx(SceneCanvasClip, {}), jsxRuntimeExports.jsx(SceneSyncViewport, {}), jsxRuntimeExports.jsx(SceneInitialZoom, {}), jsxRuntimeExports.jsx(SceneClassName, {}) ]
+      }) ]
+    });
+  };
+  const SceneBackgroundEnabled = () => {
+    const selectedScenes = useSelectedObjectScenes();
     const {commonBackgroundEnabled: commonBackgroundEnabled, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonBackgroundEnabled: false,
@@ -100875,7 +101492,7 @@
     });
   };
   const SceneBackgroundColor = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonBackgroundColor: commonBackgroundColor, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonBackgroundColor: void 0,
@@ -100945,7 +101562,7 @@
   const SceneBackgroundImage = () => {
     const currentUrlRef = reactExports.useRef(void 0);
     const currentImageRef = reactExports.useRef(null);
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonBackgroundImageUrl: commonBackgroundImageUrl, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonBackgroundImageUrl: void 0,
@@ -101061,7 +101678,7 @@
     });
   };
   const SceneCanvasBackgroundEnabled = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonCanvasBackgroundEnabled: commonCanvasBackgroundEnabled, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonCanvasBackgroundEnabled: false,
@@ -101111,7 +101728,7 @@
     });
   };
   const SceneCanvasBackgroundColor = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonBackgroundColor: commonBackgroundColor, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonBackgroundColor: void 0,
@@ -101184,7 +101801,7 @@
   const SceneCanvasBackgroundImage = () => {
     const currentUrlRef = reactExports.useRef(void 0);
     const currentImageRef = reactExports.useRef(null);
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const {commonCanvasBackgroundImageUrl: commonCanvasBackgroundImageUrl, isMixed: isMixed} = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return {
         commonCanvasBackgroundImageUrl: void 0,
@@ -101306,7 +101923,7 @@
     });
   };
   const SceneCanvasBackgroundImageSize = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const commonUrl = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return void 0;
       const values = selectedScenes.map(scene => scene.canvas?.background?.image?.url);
@@ -101352,7 +101969,7 @@
     });
   };
   const SceneCanvasBackgroundFitToImageSize = () => {
-    const selectedScenes = useSelectedScenes();
+    const selectedScenes = useSelectedObjectScenes();
     const commonUrl = reactExports.useMemo(() => {
       if (selectedScenes.length === 0) return void 0;
       const values = selectedScenes.map(scene => scene.canvas?.background?.image?.url);
@@ -101681,13 +102298,19 @@
       children: [ jsxRuntimeExports.jsx(GridShow, {}), jsxRuntimeExports.jsx(GridSnap, {}), jsxRuntimeExports.jsx(GridCellSize, {}), jsxRuntimeExports.jsx(GridOffset, {}), jsxRuntimeExports.jsx(GridColor, {}), jsxRuntimeExports.jsx(GridViewVariant, {}) ]
     })
   });
-  const SceneSettings = () => jsxRuntimeExports.jsx("div", {
-    className: "relative flex-1 overflow-auto",
-    children: jsxRuntimeExports.jsxs("div", {
-      className: "absolute inset-x-0 px-2 flex flex-col",
-      children: [ jsxRuntimeExports.jsx(SceneMainSection, {}), jsxRuntimeExports.jsx(SceneCanvasAppearanceSection, {}), jsxRuntimeExports.jsx(GridSection, {}) ]
-    })
-  });
+  const SceneSettings = () => {
+    const selectedScenes = useSelectedScenes();
+    const hasGroup = selectedScenes.some(scene => scene.type === SceneType$1.Group);
+    return jsxRuntimeExports.jsx("div", {
+      className: "relative flex-1 overflow-auto",
+      children: jsxRuntimeExports.jsxs("div", {
+        className: "absolute inset-x-0 px-2 flex flex-col",
+        children: [ jsxRuntimeExports.jsx(SceneMainSection, {}), !hasGroup && jsxRuntimeExports.jsxs(jsxRuntimeExports.Fragment, {
+          children: [ jsxRuntimeExports.jsx(SceneCanvasAppearanceSection, {}), jsxRuntimeExports.jsx(GridSection, {}) ]
+        }) ]
+      })
+    });
+  };
   const LayerID = () => {
     const selectedLayerIds = useLayoutStore(s => s.selectedLayerIds);
     const activeLayerId = useLayoutStore(s => s.lastSelectedLayerId);
@@ -103688,7 +104311,9 @@
     const activeSceneCanvasSize = useSceneStore(useShallow(s => {
       if (!activeSceneId) return null;
       const scene = s.scenes.entities[activeSceneId];
-      if (!scene) return null;
+      if (!scene || scene.type !== SceneType$1.Object) {
+        return null;
+      }
       return {
         width: scene.canvas?.width ?? 0,
         height: scene.canvas?.height ?? 0
@@ -125907,7 +126532,27 @@
         }
         switch (action) {
          case 0:
-          Service.actions.scenes.add();
+          {
+            const sceneStore = useSceneStore.getState();
+            const scene = {
+              id: generateId$1(),
+              type: SceneType$1.Object,
+              name: `Scene ${sceneStore.actions.size() + 1}`,
+              background: {
+                enabled: true,
+                color: "#f1f1f1"
+              },
+              canvas: {
+                width: 800,
+                height: 600,
+                background: {
+                  enabled: true,
+                  color: "#fff"
+                }
+              }
+            };
+            Service.actions.scenes.add(scene);
+          }
           break;
 
          case 1:

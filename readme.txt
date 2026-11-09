@@ -3,7 +3,7 @@ Contributors: yalogica, freemius
 Tags: interactive map, imagemap, svg map, hotspots, floor plan
 Requires at least: 6.0
 Tested up to: 7.1
-Stable tag: 1.24.0
+Stable tag: 1.25.0
 Requires PHP: 7.4
 License: GPLv3
 License URI: https://www.gnu.org/licenses/gpl-3.0.html
@@ -175,6 +175,12 @@ Yes! You can use rich-text popups to insert product links, images, and prices. W
 
 
 == Changelog ==
+
+= 1.25.0 =
+* Added: Scene groups with nested organization and drag-and-drop support in the builder
+
+= 1.24.1 =
+* Changed: minor user interface improvements
 
 = 1.24.0 =
 * Fixed: Layer visibility, group collapsed state, and layer lock changes now mark the map as modified, and locked layers remain locked after reopening the builder
